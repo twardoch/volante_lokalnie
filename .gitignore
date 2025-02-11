@@ -298,3 +298,4 @@ wheels/
 x64/
 x86/
 .DS_Store
+src/volante_lokalnie/volante_lokalnie.toml
