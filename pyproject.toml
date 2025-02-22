@@ -2,11 +2,11 @@
 [project]
 name = "volante_lokalnie"
 dynamic = ["version"]
-description = "A modern Python CLI tool for managing offers on Allegro Lokalnie"
+description = ""
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-keywords = ["allegro", "lokalnie", "automation", "cli", "web-scraping"]
+keywords = []
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python",
@@ -18,29 +18,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "attrs>=25.3.0",
-    "beautifulsoup4>=4.13.4", # Minor update
-    "certifi>=2025.6.15", # Minor update
-    "charset-normalizer>=3.4.2", # Minor update
-    "fire>=0.7.0", # Keeping as is, seems specific
-    "h11>=0.16.0", # Minor update
-    "html2text>=2025.4.15", # Minor update
-    "idna>=3.10", # No change, latest is 3.7 but 3.10 is fine
-    "markdown-it-py>=3.0.0", # No change, latest
-    "packaging>=25.0", # Minor update
-    "psutil>=7.0.0", # Minor update
-    "pydantic>=2.8.2", # Updated to latest
-    "pygments>=2.19.2", # Minor update
-    "pysocks>=1.7.1", # No change, latest
-    "rich>=14.0.0", # Minor update
-    "selenium>=4.23.0", # Updated to latest
-    "sortedcontainers>=2.4.0", # No change, latest
-    "soupsieve>=2.7", # Minor update
-    "tomli>=2.2.1", # Minor update (for Python < 3.11)
-    "tomli-w>=1.2.0", # Minor update
-    "trio>=0.30.0", # Minor update
-    "trio-websocket>=0.12.2", # Minor update
-    "urllib3>=2.0.0", # Added explicitly, compatible with Selenium
 ]
 
 
@@ -64,7 +41,7 @@ all = [ # This can be used to install all optional dependencies
 ]
 
 [project.scripts]
-volante = "volante_lokalnie.__main__:main"
+# CLINAME = "volante_lokalnie.__main__:main"
 
 
 

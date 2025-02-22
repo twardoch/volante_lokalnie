@@ -1,0 +1,394 @@
+/* this_file: src/volante_lokalnie/volante_lokalnie.tcss */
+
+/* Base Styles */
+Screen {
+    layout: vertical;
+    background: $surface;
+}
+
+/* Header and Footer */
+Header {
+    dock: top;
+    height: 3;
+    background: $panel;
+    color: $text;
+    border-bottom: heavy $primary;
+}
+
+Footer {
+    dock: bottom;
+    height: 3;
+    background: $panel;
+    color: $text;
+    border-top: heavy $primary;
+}
+
+/* Main Content */
+#main-content {
+    width: 100%;
+    height: 1fr;
+    layout: horizontal;
+    background: $surface;
+}
+
+/* Left Side - List View */
+#offer-list-container {
+    width: 50%;
+    height: 100%;
+    background: $surface;
+    border-right: heavy $primary;
+    layout: vertical;
+    padding: 0;
+}
+
+/* Right Side - Details View */
+#details-container {
+    width: 50%;
+    height: 100%;
+    background: $surface;
+    padding: 1;
+    display: none;
+}
+
+#details-container.visible {
+    display: block;
+}
+
+#details-container VerticalScroll {
+    width: 100%;
+    height: 100%;
+    background: $surface;
+    padding: 0;
+}
+
+/* Stats Panel */
+#stats-panel {
+    dock: top;
+    width: 100%;
+    background: $panel;
+    border-bottom: heavy $primary;
+    padding: 0;
+}
+
+#stats-grid {
+    layout: horizontal;
+    height: auto;
+    align: center middle;
+    padding: 0 1;
+}
+
+.stat-item {
+    width: 1fr;
+    height: 3;
+    content-align: center middle;
+    text-align: center;
+    border-right: solid $primary;
+}
+
+.stat-item:last-of-type {
+    border-right: none;
+}
+
+.stat-label {
+    color: $text-muted;
+    padding-right: 1;
+}
+
+.stat-value {
+    color: $text;
+    text-style: bold;
+}
+
+ListView {
+    scrollbar-gutter: stable;
+    border: none;
+    background: $surface;
+    height: auto;
+    layer: 0;
+}
+
+#loading {
+    display: none;
+    align: center middle;
+    background: $surface-darken-1 70%;
+    height: 100%;
+    width: 100%;
+    layer: 1;
+}
+
+/* Offer Items */
+#offer-item-grid {
+    grid-size: 4;
+    grid-columns: 3fr 1fr 1fr 1fr;
+    padding: 0 1;
+    height: 2;
+    align: center middle;
+}
+
+ListItem {
+    padding: 0;
+    background: $surface;
+}
+
+ListItem:hover {
+    background: $primary-darken-2;
+}
+
+ListItem.--highlight {
+    background: $primary-darken-1;
+}
+
+#offer-title {
+    color: $text;
+}
+
+#offer-price {
+    color: $success;
+    text-align: right;
+}
+
+#offer-views {
+    color: $text-muted;
+    text-align: right;
+}
+
+#offer-pending {
+    color: $warning;
+    text-align: right;
+}
+
+/* Details Grid Layout */
+#details-grid {
+    layout: vertical;
+    height: 100%;
+    padding: 1;
+}
+
+.details-section {
+    layout: vertical;
+    height: auto;
+    margin: 0 0 2 0;
+}
+
+.description-section {
+    height: 1fr;
+}
+
+Label {
+    padding: 0 0 1 0;
+    color: $text;
+}
+
+Input {
+    width: 100%;
+    margin: 0 0 1 0;
+    background: $surface-darken-1;
+    border: tall $primary;
+    padding: 0 1;
+    height: 3;
+}
+
+TextArea, MarkdownViewer {
+    width: 100%;
+    height: 1fr;
+    margin: 0;
+    background: $surface-darken-1;
+    border: tall $primary;
+    padding: 1;
+}
+
+/* MarkdownViewer Styles */
+#detail-desc-current {
+    width: 100%;
+    height: 1fr;
+    margin: 0;
+    background: $surface-darken-1;
+    border: tall $primary;
+    padding: 1;
+}
+
+#detail-desc-current .markdown-code {
+    background: $surface-darken-2;
+    color: $text;
+    border: none;
+}
+
+#detail-desc-current .markdown-link {
+    text-style: underline;
+    color: $accent;
+}
+
+#detail-desc-current .markdown-em {
+    color: $text-muted;
+}
+
+#detail-desc-current .markdown-strong {
+    text-style: bold;
+    color: $text;
+}
+
+#detail-desc-current .markdown-h1,
+#detail-desc-current .markdown-h2,
+#detail-desc-current .markdown-h3,
+#detail-desc-current .markdown-h4,
+#detail-desc-current .markdown-h5,
+#detail-desc-current .markdown-h6 {
+    text-style: bold;
+    color: $text;
+}
+
+#detail-desc-current .markdown-list-item {
+    padding-left: 2;
+}
+
+#detail-desc-current .markdown-quote {
+    background: $surface-darken-2;
+    padding: 1;
+    border-left: outer $primary;
+}
+
+/* Notifications */
+Notification {
+    background: $primary;
+    color: $text;
+    padding: 0 1;
+    width: auto;
+    margin: 1;
+}
+
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: $surface;
+    color: $text;
+    border-bottom: heavy $primary;
+    padding: 0 1;
+}
+
+#progress {
+    width: 100%;
+    height: 1;
+}
+
+#db-path {
+    width: 33%;
+    height: 1;
+    color: $text-muted;
+    text-align: left;
+    padding: 1;
+    text-overflow: ellipsis;
+    overflow-x: hidden;
+    max-width: 33%;
+    text-wrap: nowrap;
+}
+
+#filedrop {
+    dock: top;
+    width: 100%;
+    height: 3;
+    background: $primary-darken-2;
+    color: $text;
+    border: tall $primary;
+    content-align: center middle;
+    padding: 1;
+}
+
+#filedrop.hidden {
+    display: none;
+}
+
+#filedrop:focus {
+    border: tall $accent;
+}
+
+/* DataTable Styles */
+#offer-table {
+    height: 1fr;
+    border: none;
+    background: $surface;
+    align: left top;
+    scrollbar-gutter: stable;
+}
+
+DataTable > .datatable--header {
+    background: $panel;
+    color: $text;
+    text-style: bold;
+    border-bottom: heavy $primary;
+    dock: top;
+    layer: 1;
+}
+
+DataTable > .datatable--cursor {
+    background: $primary-darken-2;
+    color: $text;
+}
+
+DataTable > .datatable--hover {
+    background: $primary-darken-1;
+    color: $text;
+}
+
+DataTable > .datatable--row {
+    height: 1;
+    padding: 0 1;
+}
+
+DataTable > .datatable--row-odd {
+    background: $surface-darken-1;
+}
+
+DataTable > .datatable--row-even {
+    background: $surface;
+}
+
+/* Column-specific styles */
+.datatable--header-cell {
+    text-align: center;
+    background: $panel;
+    padding: 0 1;
+}
+
+.datatable--header-cell-0 {  /* Title column */
+    width: 3fr;
+    content-align: left middle;
+}
+
+.datatable--header-cell-1 {  /* Price column */
+    width: 1fr;
+    content-align: right middle;
+}
+
+.datatable--header-cell-2 {  /* Views column */
+    width: 1fr;
+    content-align: right middle;
+}
+
+.datatable--header-cell-3 {  /* Status column */
+    width: 1fr;
+    content-align: right middle;
+}
+
+.datatable--cell {
+    padding: 0 1;
+}
+
+.datatable--cell-0 {  /* Title column */
+    color: $text;
+    text-align: left;
+}
+
+.datatable--cell-1 {  /* Price column */
+    color: $success;
+    text-align: right;
+}
+
+.datatable--cell-2 {  /* Views column */
+    color: $text-muted;
+    text-align: right;
+}
+
+.datatable--cell-3 {  /* Status column */
+    color: $warning;
+    text-align: right;
+} 

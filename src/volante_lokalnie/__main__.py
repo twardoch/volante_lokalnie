@@ -1,45 +1,29 @@
 #!/usr/bin/env python3
 # this_file: src/volante_lokalnie/__main__.py
 
-"""Main entry point for the volante_lokalnie package.
+"""Main entry point for Volante Lokalnie."""
 
-This module provides the main entry point when running the package as a module
-using `python -m volante_lokalnie`. It uses the Fire CLI framework for automatic
-command-line interface generation and Rich for beautiful terminal output.
-
-Example:
-    python -m volante_lokalnie --help
-"""
-
-from typing import NoReturn
+import sys
 
 import fire
-from rich.console import Console
-from rich.traceback import install
 
-# Install rich traceback handler for better error reporting
-install(show_locals=True)
-
-# Initialize rich console for pretty output
-console = Console()
+from volante_lokalnie.tui import VolanteTUI
+from volante_lokalnie.volante_lokalnie import VolanteCLI
 
 
-def main() -> NoReturn:
-    """Main entry point for the CLI application.
+def main() -> None:
+    """Run the application in either CLI or TUI mode.
 
-    This function uses Google's Fire library to automatically generate a CLI
-    from the package's main functionality. It provides a clean interface to
-    all the package's features with automatic help generation.
+    If command line arguments are provided, run in CLI mode.
+    Otherwise, launch the TUI interface.
     """
-    try:
-        # Import the main functionality
-        from .volante_lokalnie import VolanteCLI
-
-        # Use Fire to create the CLI
+    if len(sys.argv) > 1:
+        # If arguments are present, use the Fire CLI
         fire.Fire(VolanteCLI)
-    except Exception as e:
-        console.print_exception()
-        raise SystemExit(1) from e
+    else:
+        # If no arguments, run the Textual TUI
+        app = VolanteTUI()
+        app.run()
 
 
 if __name__ == "__main__":

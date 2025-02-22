@@ -1,98 +1,38 @@
-# Volante Lokalnie
+# 
 
-A modern Python CLI tool for managing offers on Allegro Lokalnie, providing automation for common tasks like bulk updating listings and managing offer descriptions.
 
-## 🚀 TLDR
+
+## Features
+
+- Modern Python packaging with PEP 621 compliance
+- Type hints and runtime type checking
+- Comprehensive test suite and documentation
+- CI/CD ready configuration
+
+## Installation
 
 ```bash
-uv pip install git+https://github.com/twardoch/volante_lokalnie/
-python -m volante_lokalnie --help
+pip install volante_lokalnie
 ```
 
-## 🎯 Purpose & Background
+## Usage
 
-Allegro Lokalnie is a popular platform for local sales, but managing a large number of listings, especially for semi-professional sellers or those frequently rotating items, can become a significant time sink. Standard web interfaces are designed for manual, one-by-one operations. `volante_lokalnie` (meaning "flying locally" or "steering wheel locally") aims to provide a more efficient, programmatic way to interact with your Allegro Lokalnie offers.
-
-This tool was born out of the need to:
-- **Automate Repetitive Tasks:** Such as updating prices, descriptions, or titles across multiple offers based on templates or external data.
-- **Maintain Local Offer Data:** Keep a local, editable copy of offer details, allowing for offline editing and versioning if desired.
-- **Track Offer Performance:** Systematically fetch and store offer statistics like views.
-- **Reduce Manual Effort:** Minimize clicks and page navigation through a powerful command-line interface.
-- **Enable Scripting:** Allow integration of Allegro Lokalnie management into larger scripts or workflows.
-
-It leverages web scraping techniques to interact with the Allegro Lokalnie website, simulating browser actions to perform tasks that are not available via an official API for Allegro Lokalnie.
-
-**Disclaimer:** This tool relies on web scraping, which can be fragile and subject to break if the website structure changes. Use it responsibly and be aware of Allegro Lokalnie's terms of service. The tool includes delays to mimic human behavior but automating interactions with websites should always be done with caution.
-
-## ✨ Features
-
-- **Modern Python Stack:**
-  - Python 3.10+
-  - PEP 621 packaging with `pyproject.toml` and [Hatch](https://hatch.pypa.io/).
-  - Formatted with [Ruff](https://astral.sh/ruff) and type-checked with [MyPy](http://mypy-lang.org/).
-  - Fast dependency management with [uv](https://github.com/astral-sh/uv).
-  - Comprehensive (and growing) test suite using [Pytest](https://pytest.org/).
-  - CI/CD with GitHub Actions for linting, testing, and releases.
-  - Versioning based on Git tags via `hatch-vcs`.
-
-- **Core Offer Management:**
-  - `fetch`: Retrieve all active offers and store them locally.
-  - `read`: Get detailed description for a specific offer.
-  - `set-title`: Update an offer's title. Supports simple string templates.
-  - `set-desc`: Update an offer's description. Supports simple string templates.
-  - `read-all`: Refresh data for all offers, including their full descriptions.
-  - `publish`: Push pending local changes (title/description) for a specific offer to Allegro Lokalnie.
-  - `publish-all`: Push all pending local changes for all modified offers.
-
-- **Local Data Store:**
-  - Offers are stored in a human-readable TOML file (`volante_lokalnie.toml`) in the same directory as the script, allowing for easy inspection or manual edits if necessary.
-  - Tracks original and new (pending) titles and descriptions.
-
-- **Automation & Convenience:**
-  - **Templating:** Use placeholders like `{title}`, `{desc}`, `{price}`, `{views}` in `set-title` and `set_desc` commands to dynamically generate content. (Note: price/views are read-only from the site, but can be used in templates if you have them from other sources).
-  - **Dry-run Mode (`--dryrun`):** See what changes would be made without actually performing them.
-  - **Verbose Mode (`--verbose`):** Get detailed logging output for debugging.
-  - **Reset Mode (`--reset` with `fetch`):** Clear pending local changes (`title_new`, `desc_new`) when fetching offers.
-
-## 📦 Installation
-
-```bash
-Prerequisites:
-- Python 3.10+
-- `uv` (recommended) or `pip`
-- A running instance of Google Chrome (the tool will attempt to connect to it in debug mode).
-
-```bash
-# Using uv (recommended for speed)
-uv pip install git+https://github.com/twardoch/volante_lokalnie.git
-
-# Using pip
-pip install git+https://github.com/twardoch/volante_lokalnie.git
+```python
+import volante_lokalnie
 ```
 
-After installation, you can run the tool using `python -m volante_lokalnie` or simply `volante` if the script is installed to your PATH.
-
-```bash
-volante --help
-# or
-python -m volante_lokalnie --help
-```
-
-**Initial Setup - Chrome Debugging:**
-The tool uses Selenium to control a Chrome browser. It expects Chrome to be running with remote debugging enabled on port 9222.
-- On macOS, it will attempt to launch Chrome with the correct flags if it's not already running in debug mode at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`.
-- On other systems, or if your Chrome is elsewhere, you might need to launch Chrome manually first:
-  ```bash
-  # Example for Linux
-  google-chrome --remote-debugging-port=9222 --no-first-run --no-default-browser-check
-  # Example for Windows
-  "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --no-first-run --no-default-browser-check
-  ```
-Modify the `CHROME_PATH` constant in the script if your Chrome executable is in a non-standard location and auto-detection fails.
+## Development
 
 ## 🔧 Usage
 
-The tool operates via commands and sub-commands. All commands interact with a local data file named `volante_lokalnie.toml` (created in the directory where you run the script, or where the script itself is located if run directly).
+### Setup Development Environment
+
+```bash
+# Install hatch if you haven't already
+pip install hatch
+
+# Create and activate development environment
+hatch shell
 
 ### Global Options
 
@@ -326,16 +266,6 @@ Contributions are welcome! Whether it's bug reports, feature suggestions, docume
 -   Add unit tests for new functionality.
 -   Keep documentation (README, docstrings) updated.
 
-## 📄 License
+## License
 
-MIT License - See [LICENSE](LICENSE) file for details.
-
-## 📝 Author
-
-Adam Twardoch ([@twardoch](https://github.com/twardoch)) - (adam+github@twardoch.com)
-
-## 🔗 Links
-
-- [Documentation](https://github.com/twardoch/volante_lokalnie#readme) (You are here)
-- [Issue Tracker](https://github.com/twardoch/volante_lokalnie/issues)
-- [Source Code](https://github.com/twardoch/volante_lokalnie)
+MIT License 

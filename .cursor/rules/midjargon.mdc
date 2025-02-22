@@ -1,3 +1,7 @@
+---
+description: Rules for the volate_lokalnie package
+globs: []
+---
 BEFORE your next edit, STEP BACK and THINK HEAVILY STEP BY STEP. Be critical, consider alternatives, and carefully choose the best option. AFTER you’ve completed a step, say "Wait, but" and then do some additional careful critical reasoning. In every source file, maintain a `this_file` magic record that contains the file’s relative path from the project root. Place the magic record at the top of each file, as a comment right after the imponderabilia (shebang, PEP 723 inline script metadata etc.) or in the metadata/front matter. Update paths when moving files, omit leading `./`. WHEN WRITING CODE: Check `this_file` to confirm you're editing the right file. Use `tree` CLI app if available. Write docstrings AND comments to EXPLAIN THE CODE, including REASONS for subjective choices. WHEN WRITING PYTHON: Follow PEP 8 (clear names, simple, explicit, readable code), DRY (Don't Repeat Yourself). Use type hints in their simplest form (list, dict, | for unions), PEP 257 docstrings, f-strings, structural pattern matching. Write modern code with `pathlib`, and if needed `rich`, `pydantic`, `loguru`. For CLI use `fire` & a `uv` shebang with PEP 723 inline script metadata.
 
 <work>
