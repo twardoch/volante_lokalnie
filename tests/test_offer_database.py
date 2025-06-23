@@ -195,7 +195,7 @@ class TestOfferDatabase:
         # tomli.loads("") results in {}, so this should be fine.
         # No error should be logged for an empty file if it's valid TOML.
         # Let's check if any error IS logged.
-        assert not any(level in caplog.text for level in ["ERROR", "CRITICAL"])
+        assert all(level not in caplog.text for level in ["ERROR", "CRITICAL"])
         assert f"Loaded 0 offers from {toml_file_path}" in caplog.text # or similar debug message for 0 items
 
     # TODO: Test case for when file_path.exists() is true but reading it fails for other IO reasons (permissions?)
