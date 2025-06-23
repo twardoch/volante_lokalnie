@@ -24,23 +24,62 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Required for hatch-vcs versioning
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # Use a recent Python for Ruff
 
       - name: Run Ruff lint
         uses: astral-sh/ruff-action@v3
         with:
-          version: "latest"
-          args: "check --output-format=github"
+          version: "latest" # Or pin to a specific ruff version
+          args: "check --output-format=github ." # Check current directory
+          src: "." # Source for ruff-action to check
 
-      - name: Run Ruff Format
+      - name: Run Ruff Format Check
         uses: astral-sh/ruff-action@v3
         with:
           version: "latest"
-          args: "format --check --respect-gitignore"
+          args: "format --check --respect-gitignore ."
+          src: "."
+
+  mypy:
+    name: Static Type Checking
+    runs-on: ubuntu-latest
+    needs: quality # Run after ruff checks
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # Or matrix if types differ by version
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.12"
+          enable-cache: true
+          cache-suffix: ${{ runner.os }}-3.12-mypy
+
+      - name: Install dependencies for MyPy
+        run: |
+          uv pip install --system --upgrade pip
+          # Install main, dev, and test dependencies for comprehensive type checking
+          uv pip install --system ".[dev,test]"
+
+      - name: Run MyPy
+        run: uv run mypy src tests --config-file pyproject.toml
 
   test:
     name: Run Tests
-    needs: quality
+    needs: [quality, mypy] # Run after quality and mypy checks
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
@@ -85,24 +124,32 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for hatch-vcs versioning
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.12" # Use a specific Python version for building
 
       - name: Install UV
         uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-          python-version: "3.12"
+          python-version: "3.12" # Match the Python version above
           enable-cache: true
+          cache-suffix: ${{ runner.os }}-3.12-build # Unique cache key
 
-      - name: Install build tools
-        run: uv pip install build hatchling hatch-vcs
+      - name: Install build dependencies
+        run: uv pip install --system build hatchling hatch-vcs twine
 
       - name: Build distributions
-        run: uv run python -m build --outdir dist
+        run: uv run python -m build --sdist --wheel --outdir dist .
+
+      - name: Verify built distributions
+        run: |
+          ls -l dist/
+          uv run twine check dist/*
 
       - name: Upload distribution artifacts
         uses: actions/upload-artifact@v4

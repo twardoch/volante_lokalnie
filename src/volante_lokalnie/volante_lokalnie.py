@@ -20,7 +20,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated as Doc
-from typing import Dict, Optional, cast
+from typing import cast
 from urllib.parse import urljoin
 
 import fire
@@ -65,7 +65,7 @@ def is_port_in_use(port: int) -> bool:
         return s.connect_ex(("localhost", port)) == 0
 
 
-def find_chrome_debug_process() -> Optional[psutil.Process]:
+def find_chrome_debug_process() -> psutil.Process | None:
     """Find a Chrome process running with remote debugging enabled."""
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
@@ -160,33 +160,45 @@ class OfferDatabase:
             reverse=True,  # Descending order
         )
         # Rebuild the dictionary with sorted items
-        self.data = {url: data for url, data in sorted_items}
+        self.data = dict(sorted_items)
 
     def load(self) -> None:
         """Load data from a TOML file and convert to OfferData models."""
-        try:
-            if self.file_path.exists():
-                with open(self.file_path, "rb") as f:
-                    raw_data = tomli.load(f)
-                    # Convert each dict to an OfferData model
-                    self.data = {
-                        url: OfferData.model_validate(offer_dict)
-                        for url, offer_dict in raw_data.items()
-                    }
-                self._sort_data()
-                logger.debug(
-                    f"[DB] Loaded {len(self.data)} offers from {self.file_path}"
-                )
-            else:
-                logger.warning(
-                    f"[DB] Database {self.file_path} not found, started empty."
-                )
-                self.data = {}
-        except Exception as e:
-            logger.error(
-                f"[DB] Failed to load database: {e}. Starting with an empty database."
+        if not self.file_path.exists():
+            logger.warning(
+                f"[DB] Database {self.file_path} not found, starting empty."
             )
             self.data = {}
+            return
+
+        try:
+            with open(self.file_path, "rb") as f:
+                raw_data = tomli.load(f)
+            # Convert each dict to an OfferData model
+            self.data = {
+                url: OfferData.model_validate(offer_dict)
+                for url, offer_dict in raw_data.items()
+            }
+            self._sort_data()
+            logger.debug(
+                f"[DB] Loaded {len(self.data)} offers from {self.file_path}"
+            )
+        except FileNotFoundError: # Should be caught by exists() check, but good practice
+            logger.warning(
+                f"[DB] Database {self.file_path} not found, starting empty."
+            )
+            self.data = {}
+        except (tomli.TOMLDecodeError, ValueError) as e: # ValueError for Pydantic validation
+            logger.error(
+                f"[DB] Failed to parse database {self.file_path}: {e}. Starting with an empty database."
+            )
+            self.data = {}
+        except Exception as e: # Catch-all for other unexpected errors
+            import traceback
+            logger.error(
+                f"[DB] Unexpected error loading database: {e}. Traceback:\n{traceback.format_exc()}"
+            )
+            raise
 
     def save(self) -> None:
         """Convert OfferData models to dicts and save to TOML file."""
@@ -197,12 +209,14 @@ class OfferDatabase:
             with open(self.file_path, "wb") as f:
                 tomli_w.dump(data_dict, f)
             logger.debug(f"[DB] Saved {len(self.data)} offers to {self.file_path}")
-        except Exception as e:
-            logger.error(f"[DB] Failed to save database: {e}")
+        except OSError as e:
+            logger.error(f"[DB] File I/O error saving database to {self.file_path}: {e}")
+        except Exception as e: # Catch-all for other unexpected errors like tomli_w issues
+            logger.error(f"[DB] Unexpected error saving database: {e}")
 
-    def get_offer(self, offer_id: str) -> Optional[OfferData]:
+    def get_offer(self, offer_id: str) -> OfferData | None:
         """Retrieve an offer by its offer_id."""
-        for url, offer in self.data.items():
+        for _url, offer in self.data.items():
             if offer.offer_id == offer_id:
                 return offer
         return None
@@ -310,147 +324,162 @@ class AllegroScraper:
             EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
         )
         max_pages = self._get_max_pages()
-        offers_data: Dict[str, dict] = {}
+        # This dictionary will hold all offers found in the current scrape session.
+        # It will become the new self.db.data at the end.
+        live_offers_on_site: dict[str, OfferData] = {}
 
-        for page in range(1, max_pages + 1):
-            logger.info(f"[Site] Processing page {page} of {max_pages}...")
-            soup = BeautifulSoup(self.driver.page_source, "html.parser")
-            offer_cards = soup.find_all("div", class_="my-offer-card")
-            if not offer_cards:
-                logger.warning(f"[Site] No offers found on page {page}, stopping.")
-                break
+        for page_num in range(1, max_pages + 1):
+            logger.info(f"[Site] Processing page {page_num} of {max_pages}...")
 
-            # Process all offers on the current page.
-            for card in offer_cards:
-                result = self._extract_offer_data(card)
-                if result:
-                    offer_link, offer_obj = result
-                    if offer_link in self.db.data:
-                        # Preserve existing data while updating basic info
-                        existing = self.db.data[offer_link]
-                        offer_dict = offer_obj.model_dump()
-                        offer_dict["desc"] = existing.get("desc", "")
-                        offer_dict["desc_new"] = (
-                            "" if self.reset else existing.get("desc_new", "")
-                        )
-                        offer_dict["title_new"] = (
-                            "" if self.reset else existing.get("title_new", "")
-                        )
-                        offer_dict["published"] = (
-                            False if self.reset else existing.get("published", False)
-                        )
-                        offers_data[offer_link] = offer_dict
-                    else:
-                        # New offer: initialize with empty edits and unpublished
-                        offer_dict = offer_obj.model_dump()
-                        offer_dict["published"] = False
-                        offers_data[offer_link] = offer_dict
-
-            # Save progress after each page.
-            self.db.data = offers_data
-            self.db.save()
-            logger.debug(
-                f"[Site] Saved progress after page {page} ({len(offers_data)} offers so far)"
-            )
-
-            # Navigate to next page if applicable.
-            if page < max_pages:
-                self.driver.get(f"{ALLEGRO_URL}?page={page + 1}")
+            # Navigate to the correct page if not the first page (already on page 1)
+            if page_num > 1:
+                self.driver.get(f"{ALLEGRO_URL}?page={page_num}")
                 WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
                 )
                 human_delay()
 
+            soup = BeautifulSoup(self.driver.page_source, "html.parser")
+            offer_cards_on_page = soup.find_all("div", class_="my-offer-card")
+
+            if not offer_cards_on_page:
+                logger.warning(f"[Site] No offers found on page {page_num}. This might be the end or an issue.")
+                break # Stop if a page is empty
+
+            for card_html in offer_cards_on_page:
+                # _extract_offer_card_data parses a single card and returns OfferData
+                # It should not interact with the database.
+                parsed_result = self._extract_offer_card_data(card_html)
+
+                if parsed_result:
+                    offer_link_key, fresh_data_from_card = parsed_result
+
+                    # Check if this offer was already in our database from a previous run
+                    if offer_link_key in self.db.data:
+                        # It exists. We update the existing OfferData model with fresh basic info.
+                        # Custom fields (desc, desc_new, title_new, published) are preserved unless reset.
+                        existing_model_in_db = self.db.data[offer_link_key]
+
+                        # Update core fields from the newly scraped card data
+                        existing_model_in_db.title = fresh_data_from_card.title
+                        existing_model_in_db.price = fresh_data_from_card.price
+                        existing_model_in_db.views = fresh_data_from_card.views
+                        existing_model_in_db.listing_date = fresh_data_from_card.listing_date
+                        existing_model_in_db.image_url = fresh_data_from_card.image_url
+                        existing_model_in_db.offer_type = fresh_data_from_card.offer_type
+                        # offer_id should be the same.
+
+                        if self.reset:
+                            logger.debug(f"[DB] Resetting editable fields for offer ID {existing_model_in_db.offer_id}")
+                            existing_model_in_db.title_new = ""
+                            # Note: existing_model_in_db.desc (original description) is NOT reset here.
+                            # Fetching with --reset clears pending changes (title_new, desc_new)
+                            # and published status. It does not erase known original descriptions.
+                            existing_model_in_db.desc_new = ""
+                            existing_model_in_db.published = False
+
+                        live_offers_on_site[offer_link_key] = existing_model_in_db
+                    else:
+                        # This is a new offer not seen before.
+                        # Ensure 'published' and editable fields are default/empty.
+                        fresh_data_from_card.published = False
+                        fresh_data_from_card.title_new = ""
+                        fresh_data_from_card.desc = "" # Original description is empty until read by `read` or `read_all`
+                        fresh_data_from_card.desc_new = ""
+                        live_offers_on_site[offer_link_key] = fresh_data_from_card
+
+            logger.debug(f"[Site] Processed {len(offer_cards_on_page)} cards on page {page_num}. Total live offers found so far: {len(live_offers_on_site)}")
+
+        # After processing all pages, replace the database content with the live offers found.
+        # Offers that were in self.db.data but not in live_offers_on_site are effectively removed (no longer active).
+        self.db.data = live_offers_on_site
+        self.db.save()
+
         logger.info(
-            f"[Site] Finished fetching all {len(offers_data)} offers from website."
+            f"[Site] Fetch operation complete. Database updated with {len(self.db.data)} currently active offers."
         )
 
-    def _extract_offer_data(self, card: Tag) -> Optional[tuple[str, OfferData]]:
-        """Extract offer data from a card element on the page."""
+    def _extract_offer_card_data(self, card: Tag) -> tuple[str, OfferData] | None:
+        """Extracts offer data from a single offer card HTML element. Does not interact with DB."""
         try:
             if self.verbose:
                 logger.debug("[Scraper] Starting to extract offer data from card")
 
             link_elem = card.select_one("a[itemprop='url']")
             if not link_elem or not isinstance(link_elem.get("href"), str):
-                logger.debug("Offer card missing link element; skipping.")
+                logger.warning("Offer card missing link element; skipping.")
                 return None
 
             href = cast(str, link_elem["href"])
             offer_link = urljoin(BASE_URL, href)
-            offer_id = offer_link.split("/")[-1]
+            offer_id = offer_link.split("/")[-1] # TODO: ensure this is robust
+
+            if not offer_id:
+                logger.warning(f"Could not extract offer_id from link {offer_link}; skipping.")
+                return None
 
             if self.verbose:
-                logger.debug(f"[Scraper] Processing offer {offer_id} at {offer_link}")
+                logger.debug(f"[Scraper] Processing card for offer {offer_id} at {offer_link}")
 
             title_elem = card.select_one(".my-offer-card__title a")
             title = title_elem.text.strip() if title_elem else "Unknown Title"
 
             price_elem = card.select_one("span[itemprop='price']")
             price_text = price_elem.text.strip() if price_elem else "0"
-            price = float(price_text.replace(",", ".").replace("zł", "").strip())
+            try:
+                price = float(price_text.replace(",", ".").replace("zł", "").strip())
+            except ValueError:
+                logger.warning(f"Could not parse price '{price_text}' for offer {offer_id}. Defaulting to 0.0.")
+                price = 0.0
 
-            views_elem = card.select_one(".m-t-1.m-b-1")
+            views_elem = card.select_one(".m-t-1.m-b-1") # Example selector, might need adjustment
             views_text = views_elem.text if views_elem else "0"
-            views = int("".join(filter(str.isdigit, views_text)))
+            try:
+                views = int("".join(filter(str.isdigit, views_text)))
+            except ValueError:
+                logger.warning(f"Could not parse views '{views_text}' for offer {offer_id}. Defaulting to 0.")
+                views = 0
 
             date_elem = card.select_one("time[itemprop='startDate']")
             date_str = date_elem.get("datetime") if date_elem else None
-            listing_date = (
-                datetime.fromisoformat(
-                    cast(str, date_str).replace("Z", "+00:00")
-                ).isoformat()
-                if date_str
-                else datetime.now().isoformat()
-            )
+            listing_date : str
+            if date_str:
+                try:
+                    listing_date = datetime.fromisoformat(cast(str, date_str).replace("Z", "+00:00")).isoformat()
+                except ValueError:
+                    logger.warning(f"Could not parse date '{date_str}' for offer {offer_id}. Defaulting to now.")
+                    listing_date = datetime.now().isoformat()
+            else:
+                logger.warning(f"Missing listing date for offer {offer_id}. Defaulting to now.")
+                listing_date = datetime.now().isoformat()
+
 
             img_elem = card.select_one("img[itemprop='image']")
             image_url = cast(str, img_elem.get("src")) if img_elem else ""
 
-            type_elem = card.select_one("[data-testid^='offer-type-']")
+            type_elem = card.select_one("[data-testid^='offer-type-']") # Example selector
             offer_type = type_elem.text.strip() if type_elem else "Unknown"
 
             if self.verbose:
                 logger.debug(
-                    f"[Scraper] Successfully extracted data for offer {offer_id}"
+                    f"[Scraper] Successfully extracted data for offer {offer_id}: Title='{title}', Price={price}, Views={views}, Type='{offer_type}'"
                 )
-                logger.debug(f"[Scraper] Title: {title}")
-                logger.debug(f"[Scraper] Price: {price}")
-                logger.debug(f"[Scraper] Views: {views}")
-                logger.debug(f"[Scraper] Type: {offer_type}")
 
-            if offer_link in self.db.data:
-                existing = self.db.data[offer_link]
-                # Update only basic fields while preserving all others
-                existing.title = title
-                existing.price = price
-                existing.views = views
-                existing.listing_date = listing_date
-                existing.image_url = image_url
-                existing.offer_type = offer_type
-                self.db.data[offer_link] = existing
-                if self.verbose:
-                    logger.debug(f"[Scraper] Updated existing offer {offer_id}")
-                return offer_link, existing
-            else:
-                # New offer: initialize with empty edits
-                offer = OfferData(
-                    title=title,
-                    price=price,
-                    views=views,
-                    listing_date=listing_date,
-                    image_url=image_url,
-                    offer_type=offer_type,
-                    offer_id=offer_id,
-                )
-                self.db.data[offer_link] = offer
-                self.db.save()
-                if self.verbose:
-                    logger.debug(f"[Scraper] Created new offer {offer_id}")
-                return offer_link, offer
+            # This method now ONLY returns fresh data. It does not interact with self.db.data.
+            # The caller (fetch_offers / refresh_offers) will handle merging.
+            return offer_link, OfferData(
+                title=title,
+                price=price,
+                views=views,
+                listing_date=listing_date,
+                image_url=image_url,
+                offer_type=offer_type,
+                offer_id=offer_id,
+                # desc, title_new, desc_new, published will be set by caller or use defaults
+            )
 
         except Exception as e:
-            logger.error(f"Error extracting offer data: {e}")
+            logger.error(f"Error extracting data from an offer card: {e}")
             if self.verbose:
                 logger.exception("[Scraper] Full error details:")
             return None
@@ -499,7 +528,7 @@ class AllegroScraper:
 
         return str(soup)
 
-    def read_offer_details(self, offer_id: str) -> Optional[dict]:
+    def read_offer_details(self, offer_id: str) -> dict | None:
         """Read the description details for a specific offer and update the database.
 
         The description is converted from HTML to Markdown format before storing.
@@ -601,7 +630,7 @@ class AllegroScraper:
                         except Exception as e:
                             if self.verbose:
                                 logger.debug(
-                                    f"[Scraper] Selector {selector} failed: {str(e)}"
+                                    f"[Scraper] Selector {selector} failed: {e!s}"
                                 )
                             continue
 
@@ -657,7 +686,7 @@ class AllegroScraper:
                 except Exception as e:
                     if attempt < max_retries - 1:
                         logger.warning(
-                            f"[Scraper] Attempt {attempt + 1} failed with error: {str(e)}"
+                            f"[Scraper] Attempt {attempt + 1} failed with error: {e!s}"
                         )
                         logger.warning("[Scraper] Retrying...")
                         human_delay(3.0, 5.0)
@@ -676,12 +705,13 @@ class AllegroScraper:
 
             # Take a screenshot to help debug the issue
             try:
-                screenshot_path = f"error_screenshot_{offer_id}.png"
-                self.driver.save_screenshot(screenshot_path)
+                # Use Path for screenshot path
+                screenshot_path = Path(f"error_screenshot_{offer_id}.png")
+                self.driver.save_screenshot(str(screenshot_path))
                 logger.warning(f"[Scraper] Saved error screenshot to {screenshot_path}")
             except Exception as screenshot_error:
                 logger.error(
-                    f"[Scraper] Failed to save error screenshot: {str(screenshot_error)}"
+                    f"[Scraper] Failed to save error screenshot: {screenshot_error!s}"
                 )
 
         return None
@@ -719,219 +749,254 @@ class AllegroScraper:
     def publish_offer_details(
         self,
         offer_id: str,
-        new_title: Optional[str] = None,
-        new_desc: Optional[str] = None,
+        new_title: str | None = None,
+        new_desc: str | None = None,
     ) -> bool:
         """
-        Publish the title and/or description changes to the offer on the website and update the database.
+        Publish the title and/or description changes to the offer on the website.
+        This involves navigating the multi-step edit process on Allegro Lokalnie.
         """
         self._ensure_driver()
-        offer = self.db.get_offer(offer_id)
-        if not offer:
-            logger.error(
-                f"[Scraper] Offer {offer_id} not in database, run `list_offers` first."
-            )
+        offer_model = self.db.get_offer(offer_id)
+        if not offer_model:
+            logger.error(f"[Publish] Offer {offer_id} not in database.")
             return False
 
         try:
-            logger.debug(f"[Scraper] Navigating to edit page for offer {offer_id}...")
-            edit_url = f"{BASE_URL}/o/oferta/{offer_id}/edycja/opis"
-            self.driver.get(edit_url)
-            human_delay()
+            # Step 1: Navigate to the offer's description edit page
+            self._navigate_to_offer_edit_page(offer_id)
 
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='title']"))
+            # Step 2: Update title and description fields if changes are pending
+            title_to_set, desc_to_set = self._prepare_title_and_desc_for_publish(
+                offer_model, new_title, new_desc
             )
 
-            # Update title if needed
-            title_new = new_title or offer.title_new
-            title_new_evaluated = None
-            if title_new:
-                title_new_evaluated = self._evaluate_template(
-                    title_new, offer.model_dump()
-                )
-                current_title = offer.title
-                if title_new_evaluated != current_title:
-                    if self.verbose:
-                        logger.debug(f"[Scraper] Current title: {current_title}")
-                        logger.debug(f"[Scraper] Template title: {title_new}")
-                        logger.debug(
-                            f"[Scraper] Evaluated title: {title_new_evaluated}"
-                        )
+            made_title_change = False
+            if title_to_set is not None:
+                self._fill_offer_title(offer_id, title_to_set)
+                made_title_change = True
 
-                    if not self.dryrun:
-                        title_input = self.driver.find_element(
-                            By.CSS_SELECTOR, "input[name='title']"
-                        )
-                        title_input.clear()
-                        human_delay(0.5, 1.0)
-                        title_input.send_keys(title_new_evaluated)
-                        key = next(
-                            url
-                            for url, data in self.db.data.items()
-                            if data.offer_id == offer_id
-                        )
-                        self.db.data[key].title_new = title_new_evaluated
-                        self.db.save()  # Save after title update
-                        logger.debug(f"[Scraper] Title set to: {title_new_evaluated}")
-                    else:
-                        logger.debug(
-                            f"[DryRun] Would set title to: {title_new_evaluated}"
-                        )
+            made_desc_change = False
+            if desc_to_set is not None:
+                self._fill_offer_description(offer_id, desc_to_set)
+                made_desc_change = True
 
-            # Update description if needed
-            desc_new = new_desc or offer.desc_new
-            desc_new_evaluated = None
-            if desc_new:
-                desc_new_evaluated = self._evaluate_template(
-                    desc_new, offer.model_dump()
-                )
-                current_desc = offer.desc
-                if current_desc == "-":
-                    current_desc = ""
-                if desc_new_evaluated != current_desc:
-                    if self.verbose:
-                        logger.debug(f"[Scraper] Current description: {current_desc}")
-                        logger.debug(f"[Scraper] Template description: {desc_new}")
-                        logger.debug(
-                            f"[Scraper] Evaluated description: {desc_new_evaluated}"
-                        )
+            # Step 3: Proceed with submission if actual changes were made or attempted
+            if made_title_change or made_desc_change:
+                if self.dryrun:
+                    logger.info(f"[DryRun][Publish] Would proceed with multi-step form submission for offer {offer_id}.")
+                    return True # Simulate successful dry run publish
 
-                    if not self.dryrun:
-                        desc_elem = self.driver.find_element(
-                            By.CSS_SELECTOR, ".tiptap.ProseMirror"
-                        )
-                        desc_elem.clear()
-                        human_delay(0.5, 1.0)
-                        desc_elem.send_keys(desc_new_evaluated)
-                        key = next(
-                            url
-                            for url, data in self.db.data.items()
-                            if data.offer_id == offer_id
-                        )
-                        self.db.data[key].desc_new = desc_new_evaluated
-                        self.db.save()  # Save after description update
-                        logger.debug(
-                            f"[Scraper] Description set to: {desc_new_evaluated}"
-                        )
-                    else:
-                        logger.debug(
-                            f"[DryRun] Would set description to: {desc_new_evaluated}"
-                        )
+                # Actual multi-step submission
+                self._submit_description_form()
+                self._submit_details_form()
+                self._handle_highlight_page_if_present()
+                self._submit_summary_form()
 
-            if (title_new and title_new_evaluated != offer.title) or (
-                desc_new and desc_new_evaluated != offer.desc
-            ):
-                if not self.dryrun:
-                    human_delay()
-                    try:
-                        # First, click the submit button on the description page
-                        desc_submit_btn = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable(
-                                (By.CSS_SELECTOR, "button[type='submit']._button_00fkJ")
-                            )
-                        )
-                        desc_submit_btn.click()
-                        logger.debug("[Scraper] Clicked submit on description page")
-                        human_delay()
-
-                        # Now we should be on the details page
-                        logger.debug("[Scraper] Waiting for details page to load...")
-                        details_submit_btn = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable(
-                                (By.CSS_SELECTOR, "[data-testid='submit-button']")
-                            )
-                        )
-                        details_submit_btn.click()
-                        logger.debug("[Scraper] Clicked submit on details page")
-                        human_delay()
-
-                        # We may land on the highlight selection page
-                        current_url = self.driver.current_url
-                        if "wyroznij" in current_url:
-                            logger.debug("[Scraper] On highlight selection page...")
-
-                            # Find and click the "no highlight" option
-                            no_highlight_div = WebDriverWait(self.driver, 10).until(
-                                EC.presence_of_element_located(
-                                    (
-                                        By.XPATH,
-                                        "//div[contains(@class, '_inner_ZruGK') and .//h3[text()='Nie chcę wyróżniać']]",
-                                    )
-                                )
-                            )
-                            no_highlight_div.click()
-                            logger.debug("[Scraper] Selected 'no highlight' option")
-                            human_delay()
-
-                            # Click the next step button after selection
-                            highlight_submit_btn = WebDriverWait(self.driver, 10).until(
-                                EC.element_to_be_clickable(
-                                    (By.CSS_SELECTOR, "[data-testid='submit-button']")
-                                )
-                            )
-                            highlight_submit_btn.click()
-                            logger.debug("[Scraper] Clicked submit on highlight page")
-                            human_delay()
-
-                        # Finally, on the summary page, click the save changes button
-                        logger.debug(
-                            "[Scraper] Waiting for summary page submit button..."
-                        )
-                        final_submit_btn = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable(
-                                (By.CSS_SELECTOR, "[data-testid='submit-button']")
-                            )
-                        )
-                        final_submit_btn.click()
-                        logger.debug("[Scraper] Clicked final submit button")
-
-                        self.db.save()
-                        logger.debug(
-                            f"[Scraper] Successfully published changes to offer {offer_id}."
-                        )
-
-                        # After successful publish, mark as published and refresh the data
-                        key = next(
-                            url
-                            for url, data in self.db.data.items()
-                            if data.offer_id == offer_id
-                        )
-                        self.db.data[key].published = True
-                        self.db.save()
-
-                        # Refresh the offer data to get updated title/desc
-                        self.read_offer_details(offer_id)
-                        return True
-                    except Exception as e:
-                        logger.error(
-                            f"[Scraper] Error during form submission: {str(e)}"
-                        )
-                        # Take a screenshot to help debug the issue
-                        try:
-                            screenshot_path = f"error_screenshot_{offer_id}.png"
-                            self.driver.save_screenshot(screenshot_path)
-                            logger.warning(
-                                f"[Scraper] Saved error screenshot to {screenshot_path}"
-                            )
-                        except Exception as screenshot_error:
-                            logger.error(
-                                f"[Scraper] Failed to save error screenshot: {str(screenshot_error)}"
-                            )
-                        return False
-                else:
-                    logger.debug("[DryRun] Would click submit on description page")
-                    logger.debug("[DryRun] Would click submit on details page")
-                    logger.debug("[DryRun] Would handle highlight selection if needed")
-                    logger.debug("[DryRun] Would click final submit on summary page")
+                # Step 4: Finalize: Update database, mark as published, and refresh data
+                self._finalize_successful_publish(offer_id)
+                logger.info(f"[Publish] Successfully published changes for offer {offer_id}.")
                 return True
             else:
-                logger.debug(f"[Scraper] No changes needed for offer {offer_id}.")
+                logger.info(f"[Publish] No changes to publish for offer {offer_id}.")
                 return True
 
         except Exception as e:
-            logger.error(f"[Scraper] Error publishing offer {offer_id}: {e}")
+            logger.error(f"[Publish] Failed to publish offer {offer_id}: {e}")
+            if self.verbose:
+                logger.exception(f"[Publish] Full error details for offer {offer_id}:")
+            self._save_error_screenshot(f"publish_error_{offer_id}")
             return False
+
+    def _navigate_to_offer_edit_page(self, offer_id: str) -> None:
+        """Navigates to the description edit page for the given offer."""
+        assert self.driver is not None, "WebDriver not initialized"
+        logger.debug(f"[Publish] Navigating to edit page for offer {offer_id}...")
+        edit_url = f"{BASE_URL}/o/oferta/{offer_id}/edycja/opis"
+        self.driver.get(edit_url)
+        human_delay()
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='title']"))
+        )
+        logger.debug(f"[Publish] Reached edit page for offer {offer_id}.")
+
+    def _prepare_title_and_desc_for_publish(
+        self, offer: OfferData, new_title_arg: str | None, new_desc_arg: str | None
+    ) -> tuple[str | None, str | None]:
+        """Determines the actual title and description to set, evaluating templates if needed."""
+        title_to_set: str | None = None
+        final_title_str = new_title_arg or offer.title_new
+        if final_title_str:
+            evaluated_title = self._evaluate_template(final_title_str, offer.model_dump())
+            if evaluated_title != offer.title:
+                logger.info(f"[Publish] Will update title for {offer.offer_id}. Old: '{offer.title}', New: '{evaluated_title}'")
+                title_to_set = evaluated_title
+            else:
+                logger.debug(f"[Publish] Title for {offer.offer_id} is already up-to-date.")
+
+        desc_to_set: str | None = None
+        final_desc_str = new_desc_arg or offer.desc_new
+        if final_desc_str:
+            evaluated_desc = self._evaluate_template(final_desc_str, offer.model_dump())
+            current_desc_for_compare = offer.desc if offer.desc != "-" else ""
+            if evaluated_desc != current_desc_for_compare:
+                logger.info(f"[Publish] Will update description for {offer.offer_id}.")
+                if self.verbose:
+                    logger.debug(f"Old desc:\n{current_desc_for_compare[:200]}...\nNew desc:\n{evaluated_desc[:200]}...")
+                desc_to_set = evaluated_desc
+            else:
+                logger.debug(f"[Publish] Description for {offer.offer_id} is already up-to-date.")
+
+        return title_to_set, desc_to_set
+
+    def _fill_offer_title(self, offer_id: str, title_to_set: str) -> None:
+        """Fills the title field on the offer edit page."""
+        assert self.driver is not None, "WebDriver not initialized"
+        if self.dryrun:
+            logger.info(f"[DryRun][Publish] Would set title for {offer_id} to: '{title_to_set}'")
+            return
+
+        logger.debug(f"[Publish] Setting title for {offer_id} to: '{title_to_set}'")
+        title_input = self.driver.find_element(By.CSS_SELECTOR, "input[name='title']")
+        title_input.clear()
+        human_delay(0.3, 0.7)
+        title_input.send_keys(title_to_set)
+
+        # Update local DB immediately for title_new (actual value set)
+        offer_link_key = next(url for url, data in self.db.data.items() if data.offer_id == offer_id)
+        self.db.data[offer_link_key].title_new = title_to_set # Store the evaluated title
+        self.db.save()
+
+    def _fill_offer_description(self, offer_id: str, desc_to_set: str) -> None:
+        """Fills the description field on the offer edit page."""
+        assert self.driver is not None, "WebDriver not initialized"
+        if self.dryrun:
+            logger.info(f"[DryRun][Publish] Would set description for {offer_id}.")
+            if self.verbose: logger.debug(f"Desc content: {desc_to_set[:200]}...")
+            return
+
+        logger.debug(f"[Publish] Setting description for {offer_id}.")
+        desc_editor = self.driver.find_element(By.CSS_SELECTOR, ".tiptap.ProseMirror")
+        desc_editor.clear()
+        human_delay(0.3, 0.7)
+        desc_editor.send_keys(desc_to_set)
+
+        # Update local DB immediately for desc_new (actual value set)
+        offer_link_key = next(url for url, data in self.db.data.items() if data.offer_id == offer_id)
+        self.db.data[offer_link_key].desc_new = desc_to_set # Store the evaluated description
+        self.db.save()
+
+    def _submit_description_form(self) -> None:
+        """Clicks the submit button on the description edit page."""
+        assert self.driver is not None, "WebDriver not initialized"
+        logger.debug("[Publish] Submitting description page...")
+        submit_button = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']._button_00fkJ"))
+        )
+        submit_button.click()
+        human_delay()
+        logger.debug("[Publish] Description page submitted.")
+
+    def _submit_details_form(self) -> None:
+        """Clicks the submit button on the offer details page (after description)."""
+        assert self.driver is not None, "WebDriver not initialized"
+        logger.debug("[Publish] Submitting details page...")
+        # This page might take a moment to load, ensure selector is specific enough
+        submit_button = WebDriverWait(self.driver, 15).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "form[id^='offer-form-details-'] button[type='submit'][data-testid='submit-button']"))
+            # Example of a more specific selector if needed:
+            # EC.element_to_be_clickable((By.XPATH, "//form[contains(@id, 'offer-form-details-')]//button[@type='submit' and @data-testid='submit-button']"))
+        )
+        submit_button.click()
+        human_delay()
+        logger.debug("[Publish] Details page submitted.")
+
+    def _handle_highlight_page_if_present(self) -> None:
+        """Handles the 'highlight offer' page if it appears, opting for no highlight."""
+        assert self.driver is not None, "WebDriver not initialized"
+        current_url = self.driver.current_url
+        if "wyroznij" not in current_url:
+            logger.debug("[Publish] Highlight page not detected, skipping.")
+            return
+
+        logger.debug("[Publish] On highlight selection page. Opting for 'no highlight'.")
+        try:
+            no_highlight_option = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable( # Ensure it's clickable
+                    (By.XPATH, "//div[contains(@class, '_inner_ZruGK') and .//h3[text()='Nie chcę wyróżniać']]")
+                )
+            )
+            no_highlight_option.click()
+            human_delay()
+
+            submit_highlight_choice_button = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit'][data-testid='submit-button']"))
+                 # Using a more specific selector for the submit button on this page
+                 # (By.XPATH, "//div[contains(@class, 'allegro.wizard.wizard-layout')]//button[@data-testid='submit-button']"))
+            )
+            submit_highlight_choice_button.click()
+            human_delay()
+            logger.debug("[Publish] Highlight page handled: 'no highlight' selected and submitted.")
+        except Exception as e:
+            logger.warning(f"[Publish] Could not fully handle highlight page: {e}. Attempting to continue.")
+            self._save_error_screenshot("highlight_page_handling_error")
+
+
+    def _submit_summary_form(self) -> None:
+        """Clicks the final submit button on the offer summary/confirmation page."""
+        assert self.driver is not None, "WebDriver not initialized"
+        logger.debug("[Publish] Submitting summary page...")
+        # This is often the final step. Ensure selector is robust.
+        submit_button = WebDriverWait(self.driver, 20).until( # Longer wait for final confirmation page
+             EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid='offer-publish-summary-card-desktop'] button[data-testid='submit-button']"))
+            # Fallback or alternative:
+            # EC.element_to_be_clickable((By.XPATH, "//button[@data-testid='submit-button' and contains(., 'Zapisz zmiany') or contains(., 'Wystaw')]"))
+        )
+        submit_button.click()
+        # No human_delay() here, wait for page to change or show success message
+        # Consider adding a wait for a success indicator if one exists.
+        logger.debug("[Publish] Summary page submitted.")
+
+
+    def _finalize_successful_publish(self, offer_id: str) -> None:
+        """Updates the database after a successful publish operation."""
+        logger.debug(f"[Publish] Finalizing publish for offer {offer_id} in database.")
+        offer_link_key = next(url for url, data in self.db.data.items() if data.offer_id == offer_id)
+
+        # Update the main title/desc from title_new/desc_new if they were set
+        if self.db.data[offer_link_key].title_new:
+             self.db.data[offer_link_key].title = self.db.data[offer_link_key].title_new
+        # self.db.data[offer_link_key].title_new = "" # Clear pending title
+
+        if self.db.data[offer_link_key].desc_new:
+             self.db.data[offer_link_key].desc = self.db.data[offer_link_key].desc_new
+        # self.db.data[offer_link_key].desc_new = "" # Clear pending desc
+
+        # It's better to re-read the offer to get the canonical data from the site
+        # But for now, just mark as published and clear pending.
+        # The `read_offer_details` call below will refresh it.
+
+        self.db.data[offer_link_key].published = True
+        # Clearing title_new and desc_new after successful publish might be good,
+        # but read_offer_details should ideally fetch the new state.
+        # Let's rely on read_offer_details to update them.
+        self.db.save()
+
+        logger.info(f"[Publish] Refreshing data for offer {offer_id} after publish...")
+        self.read_offer_details(offer_id) # This will update title and desc from site
+
+    def _save_error_screenshot(self, name_prefix: str) -> None:
+        """Saves a screenshot of the current browser page for debugging."""
+        if self.driver is None:
+            return
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            screenshot_file = Path(f"{name_prefix}_{timestamp}.png")
+            self.driver.save_screenshot(str(screenshot_file))
+            logger.warning(f"[Scraper] Saved error screenshot to {screenshot_file}")
+        except Exception as e:
+            logger.error(f"[Scraper] Failed to save error screenshot: {e}")
+
 
     def refresh_offers(self) -> None:
         """Refresh offers by merging new arrivals and removing outdated entries."""
@@ -956,57 +1021,70 @@ class AllegroScraper:
                 logger.warning(f"[Site] No offers found on page {page}, stopping.")
                 break
 
-            for card in offer_cards:
-                result = self._extract_offer_data(card)
-                if result:
-                    offer_link, offer_obj = result
-                    if offer_link in self.db.data:
-                        # For existing offers: update only basic fields
-                        # Keep all other fields from existing data
-                        existing = self.db.data[offer_link]
-                        existing.title = offer_obj.title
-                        existing.price = offer_obj.price
-                        existing.views = offer_obj.views
-                        existing.listing_date = offer_obj.listing_date
-                        existing.image_url = offer_obj.image_url
-                        existing.offer_type = offer_obj.offer_type
-                        merged_offers[offer_link] = existing
+            for card_html in offer_cards: # Renamed 'card' to 'card_html' for clarity
+                parsed_result = self._extract_offer_card_data(card_html) # Changed from offer_obj to fresh_data_from_card
+                if parsed_result:
+                    offer_link_key, fresh_data_from_card = parsed_result
 
-                        # Only read description if it's missing or empty
-                        # A single space desc means details have been fetched
-                        desc = existing.desc
-                        needs_desc = bool(not desc or desc == "")
-                        if desc == "-":
-                            needs_desc = False
-                        if needs_desc:
+                    # Logic for refresh_offers:
+                    # If offer exists in DB, update its basic info, preserve desc, desc_new, title_new, published.
+                    # If desc is empty, trigger a read.
+                    # If offer is new, add it and trigger a read for its description.
+                    if offer_link_key in self.db.data:
+                        existing_model_in_db = self.db.data[offer_link_key]
+
+                        # Update core fields
+                        existing_model_in_db.title = fresh_data_from_card.title
+                        existing_model_in_db.price = fresh_data_from_card.price
+                        existing_model_in_db.views = fresh_data_from_card.views
+                        existing_model_in_db.listing_date = fresh_data_from_card.listing_date
+                        existing_model_in_db.image_url = fresh_data_from_card.image_url
+                        existing_model_in_db.offer_type = fresh_data_from_card.offer_type
+
+                        merged_offers[offer_link_key] = existing_model_in_db # Add to current live offers
+
+                        # Check if description needs to be (re-)fetched.
+                        # Original description might be empty or placeholder like "-".
+                        # self.reset flag is not typically used with refresh_offers, but good to be aware.
+                        desc_is_missing_or_placeholder = not existing_model_in_db.desc or existing_model_in_db.desc == "-"
+
+                        if desc_is_missing_or_placeholder:
                             logger.info(
-                                f"[Scraper] Reading missing description for {offer_obj.offer_id}"
+                                f"[Scraper] Existing offer {fresh_data_from_card.offer_id} needs description. Reading..."
                             )
-                            self.read_offer_details(offer_obj.offer_id)
-                            # Update from db after reading description
-                            merged_offers[offer_link] = self.db.data[offer_link]
-                        else:
-                            if self.verbose:
-                                logger.debug(
-                                    f"[Scraper] Skipping description fetch for {offer_obj.offer_id} - already have details"
-                                )
-                    else:
-                        # New offer: initialize with empty edits
-                        offer_obj.desc = ""
-                        offer_obj.desc_new = ""
-                        offer_obj.title_new = ""
-                        offer_obj.published = False
-                        merged_offers[offer_link] = offer_obj
-                        self.db.data[offer_link] = offer_obj
-                        self.db.save()  # Save before reading details
-
-                        if self.verbose:
+                            self.read_offer_details(fresh_data_from_card.offer_id)
+                            # After read_offer_details, self.db.data[offer_link_key] is updated.
+                            # So, we should reflect that in merged_offers.
+                            if offer_link_key in self.db.data: # Check if still exists (should)
+                                merged_offers[offer_link_key] = self.db.data[offer_link_key]
+                        elif self.verbose:
                             logger.debug(
-                                f"[Scraper] Reading description for new offer {offer_obj.offer_id}"
+                                f"[Scraper] Offer {fresh_data_from_card.offer_id} already has description. Skipping read."
                             )
-                        self.read_offer_details(offer_obj.offer_id)
-                        # Update from db after reading description
-                        merged_offers[offer_link] = self.db.data[offer_link]
+                    else:
+                        # This is a new offer not previously in the database.
+                        # Initialize editable fields and published status.
+                        fresh_data_from_card.title_new = ""
+                        fresh_data_from_card.desc = "" # Original description is unknown initially
+                        fresh_data_from_card.desc_new = ""
+                        fresh_data_from_card.published = False
+
+                        # Add to database first so read_offer_details can find it.
+                        self.db.data[offer_link_key] = fresh_data_from_card
+                        # self.db.save() # Consider if save is needed before read_offer_details for robustness
+
+                        logger.info(
+                            f"[Scraper] New offer {fresh_data_from_card.offer_id} found. Reading its description..."
+                        )
+                        self.read_offer_details(fresh_data_from_card.offer_id)
+
+                        # After read_offer_details, self.db.data[offer_link_key] is updated.
+                        # Reflect this in merged_offers.
+                        if offer_link_key in self.db.data: # Check if still exists
+                           merged_offers[offer_link_key] = self.db.data[offer_link_key]
+                        else: # Should not happen if read_offer_details is successful
+                           logger.warning(f"Offer {offer_link_key} disappeared after trying to read its details.")
+
 
             if page < max_pages:
                 self.driver.get(f"{ALLEGRO_URL}?page={page + 1}")
