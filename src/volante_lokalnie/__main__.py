@@ -11,8 +11,7 @@ Example:
     python -m volante_lokalnie --help
 """
 
-from pathlib import Path
-from typing import Any, NoReturn
+from typing import NoReturn
 
 import fire
 from rich.console import Console
@@ -40,7 +39,7 @@ def main() -> NoReturn:
         fire.Fire(VolanteCLI)
     except Exception as e:
         console.print_exception()
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
 
 if __name__ == "__main__":

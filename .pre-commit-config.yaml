@@ -1,20 +1,59 @@
+default_language_version:
+  python: python3.12 # Specify default python version for hooks
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.3.4
+    rev: v0.5.5 # Updated Ruff version
     hooks:
       - id: ruff
-        args: [--fix]
+        args: [--fix, --exit-non-zero-on-fix] # Auto-fix and indicate if fixes were made
       - id: ruff-format
-        args: [--respect-gitignore]
+        args: [--respect-gitignore] # Format Python files
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v4.6.0 # Updated pre-commit-hooks version
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-toml
       - id: check-added-large-files
+        args: ['--maxkb=1024'] # Example: Set max file size to 1MB
       - id: debug-statements
       - id: check-case-conflict
       - id: mixed-line-ending
-        args: [--fix=lf] 
+        args: [--fix=lf]
+      - id: check-executables-have-shebangs
+      - id: check-merge-conflict
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.0 # Match MyPy version in pyproject.toml
+    hooks:
+      - id: mypy
+        args: [--config-file=pyproject.toml]
+        additional_dependencies: [ # Ensure mypy has access to project dependencies
+            "attrs>=25.3.0",
+            "beautifulsoup4>=4.13.4",
+            "certifi>=2025.6.15",
+            "charset-normalizer>=3.4.2",
+            "fire>=0.7.0",
+            "h11>=0.16.0",
+            "html2text>=2025.4.15",
+            "idna>=3.10",
+            "markdown-it-py>=3.0.0",
+            "packaging>=25.0",
+            "psutil>=7.0.0",
+            "pydantic>=2.8.2",
+            "pygments>=2.19.2",
+            "pysocks>=1.7.1",
+            "rich>=14.0.0",
+            "selenium>=4.23.0",
+            "sortedcontainers>=2.4.0",
+            "soupsieve>=2.7",
+            "tomli>=2.2.1",
+            "tomli-w>=1.2.0",
+            "trio>=0.30.0",
+            "trio-websocket>=0.12.2",
+            "urllib3>=2.0.0",
+            # Test dependencies for checking test files
+            "pytest>=8.4.1",
+            "pytest-cov>=6.2.1"
+        ]
