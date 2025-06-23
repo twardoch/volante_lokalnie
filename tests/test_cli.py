@@ -10,11 +10,7 @@ from src.volante_lokalnie.volante_lokalnie import VolanteCLI, ScrapeExecutor, Of
 @pytest.fixture
 def mock_offer_db_instance():
     """Fixture for a mocked OfferDatabase instance."""
-    db_mock = MagicMock(spec=OfferDatabase)
-    # Setup any necessary attributes or method return values for db_mock
-    # e.g., db_mock.data = {}
-    # e.g., db_mock.get_offer.return_value = None or a mock OfferData
-    return db_mock
+    return MagicMock(spec=OfferDatabase)
 
 @pytest.fixture
 def mock_scrape_executor_instance():
