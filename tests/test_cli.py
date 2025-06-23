@@ -15,10 +15,7 @@ def mock_offer_db_instance():
 @pytest.fixture
 def mock_scrape_executor_instance():
     """Fixture for a mocked ScrapeExecutor instance."""
-    executor_mock = MagicMock(spec=ScrapeExecutor)
-    # Setup return values for its execute_* methods if needed for specific tests
-    # e.g., executor_mock.execute_fetch.return_value = None
-    return executor_mock
+    return MagicMock(spec=ScrapeExecutor)
 
 @patch("src.volante_lokalnie.volante_lokalnie.OfferDatabase")
 @patch("src.volante_lokalnie.volante_lokalnie.ScrapeExecutor")
