@@ -204,7 +204,7 @@ class OfferDatabase:
         try:
             self._sort_data()
             # Convert OfferData models to dicts for TOML serialization
-            data_dict = {url: offer.model_dump(mode="json") for url, offer in self.data.items()}
+            data_dict = {url: offer.model_dump() for url, offer in self.data.items()}
             with open(self.file_path, "wb") as f:
                 tomli_w.dump(data_dict, f)
             logger.debug(f"[DB] Saved {len(self.data)} offers to {self.file_path}")
