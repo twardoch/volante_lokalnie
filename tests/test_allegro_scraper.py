@@ -52,7 +52,7 @@ def create_mock_card_tag(
 
 def test_extract_offer_card_data_success(scraper):
     """Test successful extraction of data from a valid offer card."""
-    now_iso_utc = datetime.utcnow().isoformat() + "Z" # Ensure Z for UTC
+    now_iso_utc = f"{datetime.utcnow().isoformat()}Z"
     card_tag = create_mock_card_tag(
         offer_id="test1",
         title="Super Offer",
