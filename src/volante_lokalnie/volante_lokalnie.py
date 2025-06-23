@@ -194,10 +194,11 @@ class OfferDatabase:
             )
             self.data = {}
         except Exception as e: # Catch-all for other unexpected errors
+            import traceback
             logger.error(
-                f"[DB] Unexpected error loading database: {e}. Starting with an empty database."
+                f"[DB] Unexpected error loading database: {e}. Traceback:\n{traceback.format_exc()}"
             )
-            self.data = {}
+            raise
 
     def save(self) -> None:
         """Convert OfferData models to dicts and save to TOML file."""
