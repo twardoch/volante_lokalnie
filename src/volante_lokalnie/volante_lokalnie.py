@@ -4,10 +4,9 @@
 Created by Adam Twardoch
 """
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 __version__ = "0.1.0"
 
@@ -23,16 +22,16 @@ logger = logging.getLogger(__name__)
 class Config:
     """Configuration settings for volante_lokalnie."""
     name: str
-    value: Union[str, int, float]
-    options: Optional[Dict[str, Any]] = None
+    value: str | int | float
+    options: dict[str, Any] | None = None
 
 
 def process_data(
-    data: List[Any],
-    config: Optional[Config] = None,
+    data: list[Any],
+    config: Config | None = None,
     *,
     debug: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Process the input data according to configuration.
     
     Args:
@@ -49,12 +48,12 @@ def process_data(
     if debug:
         logger.setLevel(logging.DEBUG)
         logger.debug("Debug mode enabled")
-        
+
     if not data:
         raise ValueError("Input data cannot be empty")
-        
+
     # TODO: Implement data processing logic
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     return result
 
 
@@ -69,11 +68,11 @@ def main() -> None:
         )
         result = process_data([], config=config)
         logger.info("Processing completed: %s", result)
-        
+
     except Exception as e:
         logger.error("An error occurred: %s", str(e))
         raise
 
 
 if __name__ == "__main__":
-    main() 
+    main()

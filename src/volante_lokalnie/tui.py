@@ -9,33 +9,16 @@ from typing import cast
 import platformdirs
 from textual import on
 from textual.app import App, ComposeResult
-from textual.binding import Binding
-from textual.containers import Container, Horizontal, VerticalScroll, Grid
+from textual.containers import Container, Grid, Horizontal, VerticalScroll
 from textual.screen import Screen
-from textual.validation import Function
-from textual.widgets import (
-    Button,
-    Footer,
-    Header,
-    Input,
-    Label,
-    DataTable,
-    Markdown,
-    MarkdownViewer,
-    TextArea,
-    LoadingIndicator,
-    ProgressBar,
-    Static,
-)
+from textual.widgets import (Button, DataTable, Footer, Header, Input, Label,
+                             LoadingIndicator, MarkdownViewer, ProgressBar,
+                             Static, TextArea)
 from textual.worker import Worker, get_current_worker
 from textual_fspicker import FileOpen
 
-from volante_lokalnie.volante_lokalnie import (
-    OfferData,
-    OfferDatabase,
-    ScrapeExecutor,
-    VolanteCLI,
-)
+from volante_lokalnie.volante_lokalnie import (OfferData, OfferDatabase,
+                                               ScrapeExecutor, VolanteCLI)
 
 # Use the same database path as the CLI
 DB_FILE = Path(platformdirs.user_desktop_path()) / "volante_lokalnie.toml"
@@ -587,6 +570,7 @@ class MainScreen(Screen):
         if self.current_offer is None:
             return
         from typing import cast
+
         from volante_lokalnie.tui import VolanteTUI
 
         cast(VolanteTUI, self.app).executor.execute_read(self.current_offer.offer_id)
@@ -624,19 +608,18 @@ class MainScreen(Screen):
             elif event.key == "r":
                 self.action_refresh_offers()
                 event.stop()
-        else:
-            if event.key in ("escape", "b"):
-                self.action_back()
-                event.stop()
-            elif event.key == "r":
-                self.action_refresh_offer()
-                event.stop()
-            elif event.key in ("s", "enter"):
-                self.action_save_offer()
-                event.stop()
-            elif event.key == "p":
-                self.action_publish_offer()
-                event.stop()
+        elif event.key in ("escape", "b"):
+            self.action_back()
+            event.stop()
+        elif event.key == "r":
+            self.action_refresh_offer()
+            event.stop()
+        elif event.key in ("s", "enter"):
+            self.action_save_offer()
+            event.stop()
+        elif event.key == "p":
+            self.action_publish_offer()
+            event.stop()
 
     def get_bindings(self) -> list[tuple[str, str, str]]:
         """Return active key bindings based on the current view.
