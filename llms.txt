@@ -1,0 +1,3672 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.cursor/
+  rules/
+    midjargon.mdc
+.github/
+  workflows/
+    push.yml
+    release.yml
+  copilot-instructions.md
+src/
+  volante_lokalnie/
+    __init__.py
+    __main__.py
+    __version__.py
+    volante_lokalnie.py
+tests/
+  test_allegro_scraper.py
+  test_cli.py
+  test_offer_data.py
+  test_offer_database.py
+  test_package.py
+.gitignore
+.pre-commit-config.yaml
+LICENSE
+package.toml
+pyproject.toml
+README.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".cursor/rules/midjargon.mdc">
+BEFORE your next edit, STEP BACK and THINK HEAVILY STEP BY STEP. Be critical, consider alternatives, and carefully choose the best option. AFTER you’ve completed a step, say "Wait, but" and then do some additional careful critical reasoning. In every source file, maintain a `this_file` magic record that contains the file’s relative path from the project root. Place the magic record at the top of each file, as a comment right after the imponderabilia (shebang, PEP 723 inline script metadata etc.) or in the metadata/front matter. Update paths when moving files, omit leading `./`. WHEN WRITING CODE: Check `this_file` to confirm you're editing the right file. Use `tree` CLI app if available. Write docstrings AND comments to EXPLAIN THE CODE, including REASONS for subjective choices. WHEN WRITING PYTHON: Follow PEP 8 (clear names, simple, explicit, readable code), DRY (Don't Repeat Yourself). Use type hints in their simplest form (list, dict, | for unions), PEP 257 docstrings, f-strings, structural pattern matching. Write modern code with `pathlib`, and if needed `rich`, `pydantic`, `loguru`. For CLI use `fire` & a `uv` shebang with PEP 723 inline script metadata.
+
+<work>
+<step 1: analysis>
+Make an in-depth critical analysis of the `TASK` presented to you. Read the content of the @TODO.md file if it exists to see the current state of progress of the TASK. Then make an in-depth critical analysis of the inputs presented.
+</step>
+<step 2: gather up-to-date insights>
+Consult the @Web if you can. Consult the most up-to-date @Docs.
+</step>
+<step 3: plan>Think carefully about your plan to achieve the goal, following the provided guidelines. Write out general principles, then propose specific changes.
+</step>
+<step 4: pre-implementation>
+Once you’ve analyzed the TASK request and the inputs, you’ve gathered up-to-date insights and ran the tests and checks and once you’ve made a careful plan — write the entire plan into the file @LOG.md (in the project workspace folder) — be very detailed and specific.
+</step>
+<step 5: implementation>
+You can start implementing the plan. Whenever you’ve made larger edits to Python files, run `sh updateme.sh` to see how your changes impacted the @Codebase , then refine your plan. Keep progress documentation in @LOG.md (in the project workspace folder) , remove completed items. Work until you CLEAR the @TODO.md !
+</step>
+</work>
+</file>
+
+<file path=".github/workflows/push.yml">
+name: Build & Test
+
+on:
+  push:
+    branches: [main]
+    tags-ignore: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for hatch-vcs versioning
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # Use a recent Python for Ruff
+
+      - name: Run Ruff lint
+        uses: astral-sh/ruff-action@v3
+        with:
+          version: "latest" # Or pin to a specific ruff version
+          args: "check --output-format=github ." # Check current directory
+          src: "." # Source for ruff-action to check
+
+      - name: Run Ruff Format Check
+        uses: astral-sh/ruff-action@v3
+        with:
+          version: "latest"
+          args: "format --check --respect-gitignore ."
+          src: "."
+
+  mypy:
+    name: Static Type Checking
+    runs-on: ubuntu-latest
+    needs: quality # Run after ruff checks
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # Or matrix if types differ by version
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.12"
+          enable-cache: true
+          cache-suffix: ${{ runner.os }}-3.12-mypy
+
+      - name: Install dependencies for MyPy
+        run: |
+          uv pip install --system --upgrade pip
+          # Install main, dev, and test dependencies for comprehensive type checking
+          uv pip install --system ".[dev,test]"
+
+      - name: Run MyPy
+        run: uv run mypy src tests --config-file pyproject.toml
+
+  test:
+    name: Run Tests
+    needs: [quality, mypy] # Run after quality and mypy checks
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+        os: [ubuntu-latest]
+      fail-fast: true
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-suffix: ${{ matrix.os }}-${{ matrix.python-version }}
+
+      - name: Install test dependencies
+        run: |
+          uv pip install --system --upgrade pip
+          uv pip install --system ".[test]"
+
+      - name: Run tests with Pytest
+        run: uv run pytest -n auto --maxfail=1 --disable-warnings --cov-report=xml --cov-config=pyproject.toml --cov=src/volante_lokalnie --cov=tests tests/
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}-${{ matrix.os }}
+          path: coverage.xml
+
+  build:
+    name: Build Distribution
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for hatch-vcs versioning
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # Use a specific Python version for building
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.12" # Match the Python version above
+          enable-cache: true
+          cache-suffix: ${{ runner.os }}-3.12-build # Unique cache key
+
+      - name: Install build dependencies
+        run: uv pip install --system build hatchling hatch-vcs twine
+
+      - name: Build distributions
+        run: uv run python -m build --sdist --wheel --outdir dist .
+
+      - name: Verify built distributions
+        run: |
+          ls -l dist/
+          uv run twine check dist/*
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-files
+          path: dist/
+          retention-days: 5
+</file>
+
+<file path=".github/workflows/release.yml">
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Release to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/volante_lokalnie
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install build tools
+        run: uv pip install build hatchling hatch-vcs
+
+      - name: Build distributions
+        run: uv run python -m build --outdir dist
+
+      - name: Verify distribution files
+        run: |
+          ls -la dist/
+          test -n "$(find dist -name '*.whl')" || (echo "Wheel file missing" && exit 1)
+          test -n "$(find dist -name '*.tar.gz')" || (echo "Source distribution missing" && exit 1)
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+</file>
+
+<file path=".github/copilot-instructions.md">
+BEFORE your next edit, STEP BACK and THINK HEAVILY STEP BY STEP. Be critical, consider alternatives, and carefully choose the best option. AFTER you’ve completed a step, say "Wait, but" and then do some additional careful critical reasoning. In every source file, maintain a `this_file` magic record that contains the file’s relative path from the project root. Place the magic record at the top of each file, as a comment right after the imponderabilia (shebang, PEP 723 inline script metadata etc.) or in the metadata/front matter. Update paths when moving files, omit leading `./`. WHEN WRITING CODE: Check `this_file` to confirm you're editing the right file. Use `tree` CLI app if available. Write docstrings AND comments to EXPLAIN THE CODE, including REASONS for subjective choices. WHEN WRITING PYTHON: Follow PEP 8 (clear names, simple, explicit, readable code), DRY (Don't Repeat Yourself). Use type hints, PEP 257 docstrings, f-strings, structural pattern matching. Write modern code with `pathlib`, and if needed `rich`, `pydantic`, `loguru`. For CLI use `fire` & a `uv` shebang with PEP 723 inline script metadata.
+</file>
+
+<file path="src/volante_lokalnie/__init__.py">
+# this_file: src/volante_lokalnie/__init__.py
+
+"""Volante Lokalnie package for managing offers on the platform.
+
+This package provides tools for managing offers on the Volante Lokalnie platform,
+including fetching, reading, and updating offers through a command-line interface.
+"""
+
+from .volante_lokalnie import VolanteCLI
+
+__all__ = ["VolanteCLI"]
+</file>
+
+<file path="src/volante_lokalnie/__main__.py">
+#!/usr/bin/env python3
+# this_file: src/volante_lokalnie/__main__.py
+
+"""Main entry point for the volante_lokalnie package.
+
+This module provides the main entry point when running the package as a module
+using `python -m volante_lokalnie`. It uses the Fire CLI framework for automatic
+command-line interface generation and Rich for beautiful terminal output.
+
+Example:
+    python -m volante_lokalnie --help
+"""
+
+from typing import NoReturn
+
+import fire
+from rich.console import Console
+from rich.traceback import install
+
+# Install rich traceback handler for better error reporting
+install(show_locals=True)
+
+# Initialize rich console for pretty output
+console = Console()
+
+
+def main() -> NoReturn:
+    """Main entry point for the CLI application.
+
+    This function uses Google's Fire library to automatically generate a CLI
+    from the package's main functionality. It provides a clean interface to
+    all the package's features with automatic help generation.
+    """
+    try:
+        # Import the main functionality
+        from .volante_lokalnie import VolanteCLI
+
+        # Use Fire to create the CLI
+        fire.Fire(VolanteCLI)
+    except Exception as e:
+        console.print_exception()
+        raise SystemExit(1) from e
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="src/volante_lokalnie/__version__.py">
+# file generated by setuptools-scm
+# don't change, don't track in version control
+
+__all__ = ["__version__", "__version_tuple__", "version", "version_tuple"]
+
+TYPE_CHECKING = False
+if TYPE_CHECKING:
+
+    VERSION_TUPLE = tuple[int | str, ...]
+else:
+    VERSION_TUPLE = object
+
+version: str
+__version__: str
+__version_tuple__: VERSION_TUPLE
+version_tuple: VERSION_TUPLE
+
+__version__ = version = "1.0.1.post1+g4bec15d"
+__version_tuple__ = version_tuple = (1, 0, 1, "post1", "g4bec15d")
+</file>
+
+<file path="src/volante_lokalnie/volante_lokalnie.py">
+#!/usr/bin/env -S uv run
+# this_file: src/volante_lokalnie/volante_lokalnnie.py
+# The script implements a Fire CLI with commands to fetch, read, and update offers.
+# It uses a JSON file (with the same basename as the script) as a simple backend database.
+#
+# The CLI commands and their purposes are:
+#   • list: fetch offers from the website and store in database.
+#   • read: read an offer's description from its detail page.
+#   • set-title: update the offer title on the website (if needed).
+#   • set-desc: update the offer description on the website (if needed).
+#   • read-all: refresh the list of offers along with their detailed descriptions.
+#   • publish-all: update offers from the database by applying pending title/description edits.
+
+import logging
+import random
+import socket
+import subprocess
+import tempfile
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Annotated as Doc
+from typing import cast
+from urllib.parse import urljoin
+
+import fire
+import html2text
+import psutil
+import tomli
+import tomli_w
+from bs4 import BeautifulSoup, Tag
+from pydantic import BaseModel
+from rich.logging import RichHandler
+from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+# ------------------------------------------------------------------------------
+# Setup logging using Rich
+# ------------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,  # Default to INFO level
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[RichHandler(rich_tracebacks=True)],
+)
+logger = logging.getLogger("allegro_scraper")
+
+# ------------------------------------------------------------------------------
+# Constants
+# ------------------------------------------------------------------------------
+ALLEGRO_URL = "https://allegrolokalnie.pl/konto/oferty/aktywne"
+BASE_URL = "https://allegrolokalnie.pl"
+CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+DEBUG_PORT = 9222
+
+
+# ------------------------------------------------------------------------------
+# Utility Functions
+# ------------------------------------------------------------------------------
+def is_port_in_use(port: int) -> bool:
+    """Check if a port is in use."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("localhost", port)) == 0
+
+
+def find_chrome_debug_process() -> psutil.Process | None:
+    """Find a Chrome process running with remote debugging enabled."""
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            if proc.info["cmdline"]:
+                cmdline = " ".join(proc.info["cmdline"])
+                if (
+                    CHROME_PATH in cmdline
+                    and f"--remote-debugging-port={DEBUG_PORT}" in cmdline
+                ):
+                    return proc
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return None
+
+
+def ensure_debug_chrome() -> None:
+    """Ensure Chrome is running with remote debugging enabled."""
+    if is_port_in_use(DEBUG_PORT):
+        logger.debug("[yellow]Chrome debugging port already in use[/yellow]")
+        return
+    if find_chrome_debug_process():
+        logger.debug("[yellow]Chrome debugging process already running[/yellow]")
+        return
+    logger.debug("Launching Chrome with remote debugging enabled...")
+    tempfile.mkdtemp()
+    subprocess.Popen(
+        [
+            CHROME_PATH,
+            f"--remote-debugging-port={DEBUG_PORT}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            # f"--user-data-dir={temp_dir}",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    for _ in range(10):
+        if is_port_in_use(DEBUG_PORT):
+            logger.debug("[green]Chrome started successfully[/green]")
+            return
+        time.sleep(1)
+    raise RuntimeError("[red]Failed to start Chrome with debugging enabled[/red]")
+
+
+def human_delay(min_seconds: float = 1.0, max_seconds: float = 3.0) -> None:
+    """Pause execution for a random delay to simulate human behavior."""
+    delay = random.uniform(min_seconds, max_seconds)
+    logger.debug(f"Delaying for {delay:.2f} seconds to simulate human behavior.")
+    time.sleep(delay)
+
+
+# ------------------------------------------------------------------------------
+# Pydantic Model for Offer Data
+# ------------------------------------------------------------------------------
+class OfferData(BaseModel):
+    """Data structure for offer information."""
+
+    title: str
+    price: float
+    views: int
+    listing_date: str  # ISO format string
+    image_url: str
+    offer_type: str
+    offer_id: str
+    title_new: str = ""
+    desc: str = ""
+    desc_new: str = ""
+    published: bool = False  # Track if changes have been published
+
+
+# ------------------------------------------------------------------------------
+# Offer Database
+# ------------------------------------------------------------------------------
+class OfferDatabase:
+    """Handles reading and writing offer data to disk.
+
+    Offers are stored in a TOML file whose name is derived from the current script.
+    Uses OfferData models internally, converting to/from dicts only for TOML I/O.
+    """
+
+    def __init__(self, file_path: Path):
+        """Initialize the database with a TOML file path."""
+        self.file_path: Path = file_path.with_suffix(".toml")
+        self.data: dict[str, OfferData] = {}
+        self.load()
+
+    def _sort_data(self) -> None:
+        """Sort the data dictionary by listing date in descending order (newest first)."""
+        sorted_items = sorted(
+            self.data.items(),
+            key=lambda x: x[1].listing_date,
+            reverse=True,  # Descending order
+        )
+        # Rebuild the dictionary with sorted items
+        self.data = dict(sorted_items)
+
+    def load(self) -> None:
+        """Load data from a TOML file and convert to OfferData models."""
+        if not self.file_path.exists():
+            logger.warning(
+                f"[DB] Database {self.file_path} not found, starting empty."
+            )
+            self.data = {}
+            return
+
+        try:
+            with open(self.file_path, "rb") as f:
+                raw_data = tomli.load(f)
+            # Convert each dict to an OfferData model
+            self.data = {
+                url: OfferData.model_validate(offer_dict)
+                for url, offer_dict in raw_data.items()
+            }
+            self._sort_data()
+            logger.debug(
+                f"[DB] Loaded {len(self.data)} offers from {self.file_path}"
+            )
+        except FileNotFoundError: # Should be caught by exists() check, but good practice
+            logger.warning(
+                f"[DB] Database {self.file_path} not found, starting empty."
+            )
+            self.data = {}
+        except (tomli.TOMLDecodeError, ValueError) as e: # ValueError for Pydantic validation
+            logger.error(
+                f"[DB] Failed to parse database {self.file_path}: {e}. Starting with an empty database."
+            )
+            self.data = {}
+        except Exception as e: # Catch-all for other unexpected errors
+            import traceback
+            logger.error(
+                f"[DB] Unexpected error loading database: {e}. Traceback:\n{traceback.format_exc()}"
+            )
+            raise
+
+    def save(self) -> None:
+        """Convert OfferData models to dicts and save to TOML file."""
+        try:
+            self._sort_data()
+            # Convert OfferData models to dicts for TOML serialization
+            data_dict = {url: offer.model_dump() for url, offer in self.data.items()}
+            with open(self.file_path, "wb") as f:
+                tomli_w.dump(data_dict, f)
+            logger.debug(f"[DB] Saved {len(self.data)} offers to {self.file_path}")
+        except OSError as e:
+            logger.error(f"[DB] File I/O error saving database to {self.file_path}: {e}")
+        except Exception as e: # Catch-all for other unexpected errors like tomli_w issues
+            logger.error(f"[DB] Unexpected error saving database: {e}")
+
+    def get_offer(self, offer_id: str) -> OfferData | None:
+        """Retrieve an offer by its offer_id."""
+        for _url, offer in self.data.items():
+            if offer.offer_id == offer_id:
+                return offer
+        return None
+
+
+# ------------------------------------------------------------------------------
+# Allegro Scraper
+# ------------------------------------------------------------------------------
+class AllegroScraper:
+    """Interacts with the Allegrolokalnie website to fetch and update offers.
+
+    This class defers browser initialization until a command is invoked,
+    in order to avoid launching a browser during help display or other non-action commands.
+
+    Key methods:
+    - fetch_offers: retrieves offer cards from paginated listings.
+    - read_offer_details: reads and updates an offer's detailed description.
+    - publish_offer_details: updates title and description using the website's edit pages.
+    - refresh_offers: merges the current list with new arrivals while preserving details.
+    """
+
+    def __init__(
+        self,
+        db: OfferDatabase,
+        verbose: bool = False,
+        dryrun: bool = False,
+        reset: bool = False,
+    ):
+        self.db = db
+        self.driver: webdriver.Chrome | None = None  # Browser not initialized yet
+        self.verbose = verbose
+        self.dryrun = dryrun
+        self.reset = reset
+
+        # Set logging level based on verbose flag
+        if verbose:
+            logger.setLevel(logging.DEBUG)
+            logger.debug("[Scraper] Debug logging enabled")
+        else:
+            logger.setLevel(logging.INFO)
+
+    @staticmethod
+    def _setup_driver() -> webdriver.Chrome:
+        """Set up and return a Chrome WebDriver attached to the debugger."""
+        options = webdriver.ChromeOptions()
+        options.debugger_address = f"127.0.0.1:{DEBUG_PORT}"
+        try:
+            logger.debug("Initializing Chrome WebDriver with debugger...")
+            return webdriver.Chrome(options=options)
+        except WebDriverException as e:
+            logger.error(f"Failed to connect to Chrome: {e}")
+            raise RuntimeError("Could not connect to Chrome debugging instance") from e
+
+    def _ensure_driver(self) -> None:
+        """Ensure that the Chrome WebDriver is initialized."""
+        if self.driver is None:
+            ensure_debug_chrome()
+            self.driver = self._setup_driver()
+
+    def _wait_for_login(self) -> None:
+        """Wait for user to manually log in."""
+        logger.info(
+            """
+[Manual Login Required]
+1. Please log into Allegro Lokalnie in the browser window
+2. Navigate to: https://allegrolokalnie.pl/konto/oferty/aktywne
+3. The script will continue once you're logged in and on the offers page
+"""
+        )
+
+        max_wait = 300  # 5 minutes timeout
+        check_interval = 2  # Check every 2 seconds
+        start_time = time.time()
+
+        while time.time() - start_time < max_wait:
+            try:
+                if "konto/oferty/aktywne" not in self.driver.current_url:
+                    logger.info("Waiting for you to navigate to the offers page...")
+                    time.sleep(check_interval)
+                    continue
+
+                title = self.driver.find_element(
+                    By.CLASS_NAME, "page-header__page-title"
+                )
+                if "Moje aktywne ogłoszenia" in title.text:
+                    logger.info("[green]Successfully detected logged-in state!")
+                    return
+            except Exception:
+                pass
+            time.sleep(check_interval)
+
+        raise TimeoutError("Login timeout exceeded (5 minutes). Please try again.")
+
+    def fetch_offers(self) -> None:
+        """Fetch offer data from the website and update the local database."""
+        self._ensure_driver()
+        logger.debug("Starting to fetch offers from website...")
+        self.driver.get(ALLEGRO_URL)
+
+        # Add manual login wait here
+        self._wait_for_login()
+
+        # Continue with existing code...
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
+        )
+        max_pages = self._get_max_pages()
+        # This dictionary will hold all offers found in the current scrape session.
+        # It will become the new self.db.data at the end.
+        live_offers_on_site: dict[str, OfferData] = {}
+
+        for page_num in range(1, max_pages + 1):
+            logger.info(f"[Site] Processing page {page_num} of {max_pages}...")
+
+            # Navigate to the correct page if not the first page (already on page 1)
+            if page_num > 1:
+                self.driver.get(f"{ALLEGRO_URL}?page={page_num}")
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
+                )
+                human_delay()
+
+            soup = BeautifulSoup(self.driver.page_source, "html.parser")
+            offer_cards_on_page = soup.find_all("div", class_="my-offer-card")
+
+            if not offer_cards_on_page:
+                logger.warning(f"[Site] No offers found on page {page_num}. This might be the end or an issue.")
+                break # Stop if a page is empty
+
+            for card_html in offer_cards_on_page:
+                # _extract_offer_card_data parses a single card and returns OfferData
+                # It should not interact with the database.
+                parsed_result = self._extract_offer_card_data(card_html)
+
+                if parsed_result:
+                    offer_link_key, fresh_data_from_card = parsed_result
+
+                    # Check if this offer was already in our database from a previous run
+                    if offer_link_key in self.db.data:
+                        # It exists. We update the existing OfferData model with fresh basic info.
+                        # Custom fields (desc, desc_new, title_new, published) are preserved unless reset.
+                        existing_model_in_db = self.db.data[offer_link_key]
+
+                        # Update core fields from the newly scraped card data
+                        existing_model_in_db.title = fresh_data_from_card.title
+                        existing_model_in_db.price = fresh_data_from_card.price
+                        existing_model_in_db.views = fresh_data_from_card.views
+                        existing_model_in_db.listing_date = fresh_data_from_card.listing_date
+                        existing_model_in_db.image_url = fresh_data_from_card.image_url
+                        existing_model_in_db.offer_type = fresh_data_from_card.offer_type
+                        # offer_id should be the same.
+
+                        if self.reset:
+                            logger.debug(f"[DB] Resetting editable fields for offer ID {existing_model_in_db.offer_id}")
+                            existing_model_in_db.title_new = ""
+                            # Note: existing_model_in_db.desc (original description) is NOT reset here.
+                            # Fetching with --reset clears pending changes (title_new, desc_new)
+                            # and published status. It does not erase known original descriptions.
+                            existing_model_in_db.desc_new = ""
+                            existing_model_in_db.published = False
+
+                        live_offers_on_site[offer_link_key] = existing_model_in_db
+                    else:
+                        # This is a new offer not seen before.
+                        # Ensure 'published' and editable fields are default/empty.
+                        fresh_data_from_card.published = False
+                        fresh_data_from_card.title_new = ""
+                        fresh_data_from_card.desc = "" # Original description is empty until read by `read` or `read_all`
+                        fresh_data_from_card.desc_new = ""
+                        live_offers_on_site[offer_link_key] = fresh_data_from_card
+
+            logger.debug(f"[Site] Processed {len(offer_cards_on_page)} cards on page {page_num}. Total live offers found so far: {len(live_offers_on_site)}")
+
+        # After processing all pages, replace the database content with the live offers found.
+        # Offers that were in self.db.data but not in live_offers_on_site are effectively removed (no longer active).
+        self.db.data = live_offers_on_site
+        self.db.save()
+
+        logger.info(
+            f"[Site] Fetch operation complete. Database updated with {len(self.db.data)} currently active offers."
+        )
+
+    def _extract_offer_card_data(self, card: Tag) -> tuple[str, OfferData] | None:
+        """Extracts offer data from a single offer card HTML element. Does not interact with DB."""
+        try:
+            if self.verbose:
+                logger.debug("[Scraper] Starting to extract offer data from card")
+
+            link_elem = card.select_one("a[itemprop='url']")
+            if not link_elem or not isinstance(link_elem.get("href"), str):
+                logger.warning("Offer card missing link element; skipping.")
+                return None
+
+            href = cast(str, link_elem["href"])
+            offer_link = urljoin(BASE_URL, href)
+            offer_id = offer_link.split("/")[-1] # TODO: ensure this is robust
+
+            if not offer_id:
+                logger.warning(f"Could not extract offer_id from link {offer_link}; skipping.")
+                return None
+
+            if self.verbose:
+                logger.debug(f"[Scraper] Processing card for offer {offer_id} at {offer_link}")
+
+            title_elem = card.select_one(".my-offer-card__title a")
+            title = title_elem.text.strip() if title_elem else "Unknown Title"
+
+            price_elem = card.select_one("span[itemprop='price']")
+            price_text = price_elem.text.strip() if price_elem else "0"
+            try:
+                price = float(price_text.replace(",", ".").replace("zł", "").strip())
+            except ValueError:
+                logger.warning(f"Could not parse price '{price_text}' for offer {offer_id}. Defaulting to 0.0.")
+                price = 0.0
+
+            views_elem = card.select_one(".m-t-1.m-b-1") # Example selector, might need adjustment
+            views_text = views_elem.text if views_elem else "0"
+            try:
+                views = int("".join(filter(str.isdigit, views_text)))
+            except ValueError:
+                logger.warning(f"Could not parse views '{views_text}' for offer {offer_id}. Defaulting to 0.")
+                views = 0
+
+            date_elem = card.select_one("time[itemprop='startDate']")
+            date_str = date_elem.get("datetime") if date_elem else None
+            listing_date : str
+            if date_str:
+                try:
+                    listing_date = datetime.fromisoformat(cast(str, date_str).replace("Z", "+00:00")).isoformat()
+                except ValueError:
+                    logger.warning(f"Could not parse date '{date_str}' for offer {offer_id}. Defaulting to now.")
+                    listing_date = datetime.now().isoformat()
+            else:
+                logger.warning(f"Missing listing date for offer {offer_id}. Defaulting to now.")
+                listing_date = datetime.now().isoformat()
+
+
+            img_elem = card.select_one("img[itemprop='image']")
+            image_url = cast(str, img_elem.get("src")) if img_elem else ""
+
+            type_elem = card.select_one("[data-testid^='offer-type-']") # Example selector
+            offer_type = type_elem.text.strip() if type_elem else "Unknown"
+
+            if self.verbose:
+                logger.debug(
+                    f"[Scraper] Successfully extracted data for offer {offer_id}: Title='{title}', Price={price}, Views={views}, Type='{offer_type}'"
+                )
+
+            # This method now ONLY returns fresh data. It does not interact with self.db.data.
+            # The caller (fetch_offers / refresh_offers) will handle merging.
+            return offer_link, OfferData(
+                title=title,
+                price=price,
+                views=views,
+                listing_date=listing_date,
+                image_url=image_url,
+                offer_type=offer_type,
+                offer_id=offer_id,
+                # desc, title_new, desc_new, published will be set by caller or use defaults
+            )
+
+        except Exception as e:
+            logger.error(f"Error extracting data from an offer card: {e}")
+            if self.verbose:
+                logger.exception("[Scraper] Full error details:")
+            return None
+
+    def _get_max_pages(self) -> int:
+        """Extract the maximum number of pages from the pagination element."""
+        try:
+            soup = BeautifulSoup(self.driver.page_source, "html.parser")
+
+            # Look for the pagination input element that contains max pages
+            page_input = soup.select_one(".pagination__pages input[type='number']")
+            if page_input and page_input.get("max"):
+                return int(page_input["max"])
+
+            # Fallback: if no pagination input found, we're on the only page
+            return 1
+
+        except Exception as e:
+            logger.error(f"Error determining max pages: {e}")
+            return 1
+
+    def _preprocess_html(self, html: str) -> str:
+        """Preprocess HTML before converting to Markdown.
+
+        This handles special cases like:
+        - Converting <p class="desc-h2"> to <h2>
+        - Converting <p class="desc-p"> to <p>
+        - Any other custom HTML preprocessing needed
+
+        Args:
+            html: Raw HTML string to preprocess
+
+        Returns:
+            Preprocessed HTML string ready for Markdown conversion
+        """
+        soup = BeautifulSoup(html, "html.parser")
+
+        # Convert p.desc-h2 to h2
+        for p in soup.find_all("p", class_="desc-h2"):
+            p.name = "h2"
+            del p["class"]
+
+        # Clean up p.desc-p (just remove the class)
+        for p in soup.find_all("p", class_="desc-p"):
+            del p["class"]
+
+        return str(soup)
+
+    def read_offer_details(self, offer_id: str) -> dict | None:
+        """Read the description details for a specific offer and update the database.
+
+        The description is converted from HTML to Markdown format before storing.
+        Uses multiple strategies to find and extract the description with retries.
+        """
+        self._ensure_driver()
+        offer = self.db.get_offer(offer_id)
+        if not offer:
+            logger.error(
+                f"[Scraper] Offer {offer_id} not in database, run `list_offers` first."
+            )
+            return None
+
+        try:
+            offer_url = next(
+                url for url, data in self.db.data.items() if data.offer_id == offer_id
+            )
+            logger.info(
+                f"[Scraper] Reading details for offer {offer_id} from {offer_url}..."
+            )
+
+            # Try loading the page up to 3 times
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    self.driver.get(offer_url)
+                    human_delay(2.0, 3.0)  # Longer delay for page load
+
+                    # Wait for any of the possible containers to be present
+                    containers = [
+                        "section.mlc-offer__offer-details",
+                        "div.mlc-offer__description",
+                        ".ml-text-medium.mlc-offer__description",
+                        "#app-root main div.mlc-offer section.ml-normalize-section.mlc-offer__offer-details",
+                    ]
+
+                    # Try each container selector
+                    desc_element = None
+                    desc_html = None
+
+                    # First check if we have a parameters-only offer
+                    try:
+                        # Get page source first for BeautifulSoup parsing
+                        page_source = self.driver.page_source
+                        soup = BeautifulSoup(page_source, "html.parser")
+
+                        params_table = WebDriverWait(self.driver, 5).until(
+                            EC.presence_of_element_located(
+                                (By.CSS_SELECTOR, "table.mlc-params__list")
+                            )
+                        )
+                        if params_table and not soup.select_one(
+                            "div.mlc-offer__description"
+                        ):
+                            if self.verbose:
+                                logger.debug(
+                                    "[Scraper] Found parameters-only offer, no description"
+                                )
+                            # Store a single space for parameters-only offers
+                            self.db.data[offer_url].desc = "-"
+                            self.db.save()
+                            logger.debug(
+                                f"[Scraper] Stored empty description for parameters-only offer {offer_id}"
+                            )
+                            return self.db.get_offer(offer_id)
+                    except Exception:
+                        # If we can't find params table, continue with normal description search
+                        pass
+
+                    for selector in containers:
+                        try:
+                            logger.debug(f"[Scraper] Trying selector: {selector}")
+                            # Wait up to 15 seconds for element
+                            element = WebDriverWait(self.driver, 15).until(
+                                EC.presence_of_element_located(
+                                    (By.CSS_SELECTOR, selector)
+                                )
+                            )
+
+                            # If we found the section, look for description inside
+                            if "offer-details" in selector:
+                                try:
+                                    desc_element = element.find_element(
+                                        By.CSS_SELECTOR, "div.mlc-offer__description"
+                                    )
+                                except:
+                                    continue
+                            else:
+                                desc_element = element
+
+                            if desc_element:
+                                # Try different methods to get content
+                                desc_html = desc_element.get_attribute("innerHTML")
+                                if not desc_html:
+                                    desc_html = desc_element.get_attribute("outerHTML")
+                                if desc_html:
+                                    break
+
+                        except Exception as e:
+                            if self.verbose:
+                                logger.debug(
+                                    f"[Scraper] Selector {selector} failed: {e!s}"
+                                )
+                            continue
+
+                    if not desc_html:
+                        # Fallback: try to get the HTML directly from page source
+                        page_source = self.driver.page_source
+                        soup = BeautifulSoup(page_source, "html.parser")
+                        desc_elem = soup.select_one("div.mlc-offer__description")
+                        if desc_elem:
+                            desc_html = str(desc_elem)
+
+                    if desc_html:
+                        if self.verbose:
+                            logger.debug(
+                                "[Scraper] Successfully found description element"
+                            )
+
+                        # Preprocess HTML before conversion
+                        desc_html = self._preprocess_html(desc_html)
+
+                        # Convert HTML to Markdown
+                        h = html2text.HTML2Text()
+                        h.body_width = 0  # Don't wrap lines
+                        h.unicode_snob = True  # Use Unicode characters
+                        desc_markdown = h.handle(desc_html).strip()
+
+                        if desc_markdown:
+                            if self.verbose:
+                                logger.debug(
+                                    f"[Scraper] Converted description ({len(desc_markdown)} chars)"
+                                )
+                                logger.debug("First 100 chars of description:")
+                                logger.debug(desc_markdown[:100] + "...")
+
+                            # Update the database
+                            self.db.data[offer_url].desc = desc_markdown
+                            self.db.save()  # Save immediately after reading description
+                            logger.debug(
+                                f"[Scraper] Read and stored description for offer {offer_id}."
+                            )
+                            return self.db.get_offer(offer_id)
+                        else:
+                            logger.warning(
+                                "[Scraper] Found element but got empty description"
+                            )
+
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            f"[Scraper] Attempt {attempt + 1} failed, retrying..."
+                        )
+                        human_delay(3.0, 5.0)  # Longer delay between retries
+
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            f"[Scraper] Attempt {attempt + 1} failed with error: {e!s}"
+                        )
+                        logger.warning("[Scraper] Retrying...")
+                        human_delay(3.0, 5.0)
+                    else:
+                        raise  # Re-raise on last attempt
+
+            # If we get here, all attempts failed
+            logger.error(
+                f"[Scraper] Failed to read description after {max_retries} attempts"
+            )
+
+        except Exception as e:
+            logger.error(f"[Scraper] Error reading offer {offer_id}: {e}")
+            if self.verbose:
+                logger.exception("[Scraper] Full error details:")
+
+            # Take a screenshot to help debug the issue
+            try:
+                # Use Path for screenshot path
+                screenshot_path = Path(f"error_screenshot_{offer_id}.png")
+                self.driver.save_screenshot(str(screenshot_path))
+                logger.warning(f"[Scraper] Saved error screenshot to {screenshot_path}")
+            except Exception as screenshot_error:
+                logger.error(
+                    f"[Scraper] Failed to save error screenshot: {screenshot_error!s}"
+                )
+
+        return None
+
+    def _evaluate_template(self, template: str, offer: dict) -> str:
+        """Evaluate a template string containing {desc}, {title}, etc. placeholders.
+
+        Args:
+            template: The template string to evaluate
+            offer: The offer dictionary containing the current values
+
+        Returns:
+            The evaluated string with all placeholders replaced
+        """
+        if not template:
+            return template
+
+        # Create a context with all possible variables
+        context = {
+            "desc": offer.get("desc", ""),
+            "title": offer.get("title", ""),
+            "title_new": offer.get("title_new", ""),
+            "desc_new": offer.get("desc_new", ""),
+        }
+
+        try:
+            return template.format(**context)
+        except KeyError as e:
+            logger.error(f"[Template] Unknown placeholder in template: {e}")
+            return template
+        except Exception as e:
+            logger.error(f"[Template] Error evaluating template: {e}")
+            return template
+
+    def publish_offer_details(
+        self,
+        offer_id: str,
+        new_title: str | None = None,
+        new_desc: str | None = None,
+    ) -> bool:
+        """
+        Publish the title and/or description changes to the offer on the website.
+        This involves navigating the multi-step edit process on Allegro Lokalnie.
+        """
+        self._ensure_driver()
+        offer_model = self.db.get_offer(offer_id)
+        if not offer_model:
+            logger.error(f"[Publish] Offer {offer_id} not in database.")
+            return False
+
+        try:
+            # Step 1: Navigate to the offer's description edit page
+            self._navigate_to_offer_edit_page(offer_id)
+
+            # Step 2: Update title and description fields if changes are pending
+            title_to_set, desc_to_set = self._prepare_title_and_desc_for_publish(
+                offer_model, new_title, new_desc
+            )
+
+            made_title_change = False
+            if title_to_set is not None:
+                self._fill_offer_title(offer_id, title_to_set)
+                made_title_change = True
+
+            made_desc_change = False
+            if desc_to_set is not None:
+                self._fill_offer_description(offer_id, desc_to_set)
+                made_desc_change = True
+
+            # Step 3: Proceed with submission if actual changes were made or attempted
+            if made_title_change or made_desc_change:
+                if self.dryrun:
+                    logger.info(f"[DryRun][Publish] Would proceed with multi-step form submission for offer {offer_id}.")
+                    return True # Simulate successful dry run publish
+
+                # Actual multi-step submission
+                self._submit_description_form()
+                self._submit_details_form()
+                self._handle_highlight_page_if_present()
+                self._submit_summary_form()
+
+                # Step 4: Finalize: Update database, mark as published, and refresh data
+                self._finalize_successful_publish(offer_id)
+                logger.info(f"[Publish] Successfully published changes for offer {offer_id}.")
+                return True
+            else:
+                logger.info(f"[Publish] No changes to publish for offer {offer_id}.")
+                return True
+
+        except Exception as e:
+            logger.error(f"[Publish] Failed to publish offer {offer_id}: {e}")
+            if self.verbose:
+                logger.exception(f"[Publish] Full error details for offer {offer_id}:")
+            self._save_error_screenshot(f"publish_error_{offer_id}")
+            return False
+
+    def _navigate_to_offer_edit_page(self, offer_id: str) -> None:
+        """Navigates to the description edit page for the given offer."""
+        assert self.driver is not None, "WebDriver not initialized"
+        logger.debug(f"[Publish] Navigating to edit page for offer {offer_id}...")
+        edit_url = f"{BASE_URL}/o/oferta/{offer_id}/edycja/opis"
+        self.driver.get(edit_url)
+        human_delay()
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='title']"))
+        )
+        logger.debug(f"[Publish] Reached edit page for offer {offer_id}.")
+
+    def _prepare_title_and_desc_for_publish(
+        self, offer: OfferData, new_title_arg: str | None, new_desc_arg: str | None
+    ) -> tuple[str | None, str | None]:
+        """Determines the actual title and description to set, evaluating templates if needed."""
+        title_to_set: str | None = None
+        final_title_str = new_title_arg or offer.title_new
+        if final_title_str:
+            evaluated_title = self._evaluate_template(final_title_str, offer.model_dump())
+            if evaluated_title != offer.title:
+                logger.info(f"[Publish] Will update title for {offer.offer_id}. Old: '{offer.title}', New: '{evaluated_title}'")
+                title_to_set = evaluated_title
+            else:
+                logger.debug(f"[Publish] Title for {offer.offer_id} is already up-to-date.")
+
+        desc_to_set: str | None = None
+        final_desc_str = new_desc_arg or offer.desc_new
+        if final_desc_str:
+            evaluated_desc = self._evaluate_template(final_desc_str, offer.model_dump())
+            current_desc_for_compare = offer.desc if offer.desc != "-" else ""
+            if evaluated_desc != current_desc_for_compare:
+                logger.info(f"[Publish] Will update description for {offer.offer_id}.")
+                if self.verbose:
+                    logger.debug(f"Old desc:\n{current_desc_for_compare[:200]}...\nNew desc:\n{evaluated_desc[:200]}...")
+                desc_to_set = evaluated_desc
+            else:
+                logger.debug(f"[Publish] Description for {offer.offer_id} is already up-to-date.")
+
+        return title_to_set, desc_to_set
+
+    def _fill_offer_title(self, offer_id: str, title_to_set: str) -> None:
+        """Fills the title field on the offer edit page."""
+        assert self.driver is not None, "WebDriver not initialized"
+        if self.dryrun:
+            logger.info(f"[DryRun][Publish] Would set title for {offer_id} to: '{title_to_set}'")
+            return
+
+        logger.debug(f"[Publish] Setting title for {offer_id} to: '{title_to_set}'")
+        title_input = self.driver.find_element(By.CSS_SELECTOR, "input[name='title']")
+        title_input.clear()
+        human_delay(0.3, 0.7)
+        title_input.send_keys(title_to_set)
+
+        # Update local DB immediately for title_new (actual value set)
+        offer_link_key = next(url for url, data in self.db.data.items() if data.offer_id == offer_id)
+        self.db.data[offer_link_key].title_new = title_to_set # Store the evaluated title
+        self.db.save()
+
+    def _fill_offer_description(self, offer_id: str, desc_to_set: str) -> None:
+        """Fills the description field on the offer edit page."""
+        assert self.driver is not None, "WebDriver not initialized"
+        if self.dryrun:
+            logger.info(f"[DryRun][Publish] Would set description for {offer_id}.")
+            if self.verbose: logger.debug(f"Desc content: {desc_to_set[:200]}...")
+            return
+
+        logger.debug(f"[Publish] Setting description for {offer_id}.")
+        desc_editor = self.driver.find_element(By.CSS_SELECTOR, ".tiptap.ProseMirror")
+        desc_editor.clear()
+        human_delay(0.3, 0.7)
+        desc_editor.send_keys(desc_to_set)
+
+        # Update local DB immediately for desc_new (actual value set)
+        offer_link_key = next(url for url, data in self.db.data.items() if data.offer_id == offer_id)
+        self.db.data[offer_link_key].desc_new = desc_to_set # Store the evaluated description
+        self.db.save()
+
+    def _submit_description_form(self) -> None:
+        """Clicks the submit button on the description edit page."""
+        assert self.driver is not None, "WebDriver not initialized"
+        logger.debug("[Publish] Submitting description page...")
+        submit_button = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']._button_00fkJ"))
+        )
+        submit_button.click()
+        human_delay()
+        logger.debug("[Publish] Description page submitted.")
+
+    def _submit_details_form(self) -> None:
+        """Clicks the submit button on the offer details page (after description)."""
+        assert self.driver is not None, "WebDriver not initialized"
+        logger.debug("[Publish] Submitting details page...")
+        # This page might take a moment to load, ensure selector is specific enough
+        submit_button = WebDriverWait(self.driver, 15).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "form[id^='offer-form-details-'] button[type='submit'][data-testid='submit-button']"))
+            # Example of a more specific selector if needed:
+            # EC.element_to_be_clickable((By.XPATH, "//form[contains(@id, 'offer-form-details-')]//button[@type='submit' and @data-testid='submit-button']"))
+        )
+        submit_button.click()
+        human_delay()
+        logger.debug("[Publish] Details page submitted.")
+
+    def _handle_highlight_page_if_present(self) -> None:
+        """Handles the 'highlight offer' page if it appears, opting for no highlight."""
+        assert self.driver is not None, "WebDriver not initialized"
+        current_url = self.driver.current_url
+        if "wyroznij" not in current_url:
+            logger.debug("[Publish] Highlight page not detected, skipping.")
+            return
+
+        logger.debug("[Publish] On highlight selection page. Opting for 'no highlight'.")
+        try:
+            no_highlight_option = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable( # Ensure it's clickable
+                    (By.XPATH, "//div[contains(@class, '_inner_ZruGK') and .//h3[text()='Nie chcę wyróżniać']]")
+                )
+            )
+            no_highlight_option.click()
+            human_delay()
+
+            submit_highlight_choice_button = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit'][data-testid='submit-button']"))
+                 # Using a more specific selector for the submit button on this page
+                 # (By.XPATH, "//div[contains(@class, 'allegro.wizard.wizard-layout')]//button[@data-testid='submit-button']"))
+            )
+            submit_highlight_choice_button.click()
+            human_delay()
+            logger.debug("[Publish] Highlight page handled: 'no highlight' selected and submitted.")
+        except Exception as e:
+            logger.warning(f"[Publish] Could not fully handle highlight page: {e}. Attempting to continue.")
+            self._save_error_screenshot("highlight_page_handling_error")
+
+
+    def _submit_summary_form(self) -> None:
+        """Clicks the final submit button on the offer summary/confirmation page."""
+        assert self.driver is not None, "WebDriver not initialized"
+        logger.debug("[Publish] Submitting summary page...")
+        # This is often the final step. Ensure selector is robust.
+        submit_button = WebDriverWait(self.driver, 20).until( # Longer wait for final confirmation page
+             EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid='offer-publish-summary-card-desktop'] button[data-testid='submit-button']"))
+            # Fallback or alternative:
+            # EC.element_to_be_clickable((By.XPATH, "//button[@data-testid='submit-button' and contains(., 'Zapisz zmiany') or contains(., 'Wystaw')]"))
+        )
+        submit_button.click()
+        # No human_delay() here, wait for page to change or show success message
+        # Consider adding a wait for a success indicator if one exists.
+        logger.debug("[Publish] Summary page submitted.")
+
+
+    def _finalize_successful_publish(self, offer_id: str) -> None:
+        """Updates the database after a successful publish operation."""
+        logger.debug(f"[Publish] Finalizing publish for offer {offer_id} in database.")
+        offer_link_key = next(url for url, data in self.db.data.items() if data.offer_id == offer_id)
+
+        # Update the main title/desc from title_new/desc_new if they were set
+        if self.db.data[offer_link_key].title_new:
+             self.db.data[offer_link_key].title = self.db.data[offer_link_key].title_new
+        # self.db.data[offer_link_key].title_new = "" # Clear pending title
+
+        if self.db.data[offer_link_key].desc_new:
+             self.db.data[offer_link_key].desc = self.db.data[offer_link_key].desc_new
+        # self.db.data[offer_link_key].desc_new = "" # Clear pending desc
+
+        # It's better to re-read the offer to get the canonical data from the site
+        # But for now, just mark as published and clear pending.
+        # The `read_offer_details` call below will refresh it.
+
+        self.db.data[offer_link_key].published = True
+        # Clearing title_new and desc_new after successful publish might be good,
+        # but read_offer_details should ideally fetch the new state.
+        # Let's rely on read_offer_details to update them.
+        self.db.save()
+
+        logger.info(f"[Publish] Refreshing data for offer {offer_id} after publish...")
+        self.read_offer_details(offer_id) # This will update title and desc from site
+
+    def _save_error_screenshot(self, name_prefix: str) -> None:
+        """Saves a screenshot of the current browser page for debugging."""
+        if self.driver is None:
+            return
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            screenshot_file = Path(f"{name_prefix}_{timestamp}.png")
+            self.driver.save_screenshot(str(screenshot_file))
+            logger.warning(f"[Scraper] Saved error screenshot to {screenshot_file}")
+        except Exception as e:
+            logger.error(f"[Scraper] Failed to save error screenshot: {e}")
+
+
+    def refresh_offers(self) -> None:
+        """Refresh offers by merging new arrivals and removing outdated entries."""
+        self._ensure_driver()
+        logger.info("Refreshing offers from website...")
+        self.driver.get(ALLEGRO_URL)
+
+        # Add manual login wait here
+        self._wait_for_login()
+
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
+        )
+        max_pages = self._get_max_pages()
+        merged_offers: dict[str, OfferData] = {}
+
+        for page in range(1, max_pages + 1):
+            logger.info(f"[Site] Processing page {page} of {max_pages}...")
+            soup = BeautifulSoup(self.driver.page_source, "html.parser")
+            offer_cards = soup.find_all("div", class_="my-offer-card")
+            if not offer_cards:
+                logger.warning(f"[Site] No offers found on page {page}, stopping.")
+                break
+
+            for card_html in offer_cards: # Renamed 'card' to 'card_html' for clarity
+                parsed_result = self._extract_offer_card_data(card_html) # Changed from offer_obj to fresh_data_from_card
+                if parsed_result:
+                    offer_link_key, fresh_data_from_card = parsed_result
+
+                    # Logic for refresh_offers:
+                    # If offer exists in DB, update its basic info, preserve desc, desc_new, title_new, published.
+                    # If desc is empty, trigger a read.
+                    # If offer is new, add it and trigger a read for its description.
+                    if offer_link_key in self.db.data:
+                        existing_model_in_db = self.db.data[offer_link_key]
+
+                        # Update core fields
+                        existing_model_in_db.title = fresh_data_from_card.title
+                        existing_model_in_db.price = fresh_data_from_card.price
+                        existing_model_in_db.views = fresh_data_from_card.views
+                        existing_model_in_db.listing_date = fresh_data_from_card.listing_date
+                        existing_model_in_db.image_url = fresh_data_from_card.image_url
+                        existing_model_in_db.offer_type = fresh_data_from_card.offer_type
+
+                        merged_offers[offer_link_key] = existing_model_in_db # Add to current live offers
+
+                        # Check if description needs to be (re-)fetched.
+                        # Original description might be empty or placeholder like "-".
+                        # self.reset flag is not typically used with refresh_offers, but good to be aware.
+                        desc_is_missing_or_placeholder = not existing_model_in_db.desc or existing_model_in_db.desc == "-"
+
+                        if desc_is_missing_or_placeholder:
+                            logger.info(
+                                f"[Scraper] Existing offer {fresh_data_from_card.offer_id} needs description. Reading..."
+                            )
+                            self.read_offer_details(fresh_data_from_card.offer_id)
+                            # After read_offer_details, self.db.data[offer_link_key] is updated.
+                            # So, we should reflect that in merged_offers.
+                            if offer_link_key in self.db.data: # Check if still exists (should)
+                                merged_offers[offer_link_key] = self.db.data[offer_link_key]
+                        elif self.verbose:
+                            logger.debug(
+                                f"[Scraper] Offer {fresh_data_from_card.offer_id} already has description. Skipping read."
+                            )
+                    else:
+                        # This is a new offer not previously in the database.
+                        # Initialize editable fields and published status.
+                        fresh_data_from_card.title_new = ""
+                        fresh_data_from_card.desc = "" # Original description is unknown initially
+                        fresh_data_from_card.desc_new = ""
+                        fresh_data_from_card.published = False
+
+                        # Add to database first so read_offer_details can find it.
+                        self.db.data[offer_link_key] = fresh_data_from_card
+                        # self.db.save() # Consider if save is needed before read_offer_details for robustness
+
+                        logger.info(
+                            f"[Scraper] New offer {fresh_data_from_card.offer_id} found. Reading its description..."
+                        )
+                        self.read_offer_details(fresh_data_from_card.offer_id)
+
+                        # After read_offer_details, self.db.data[offer_link_key] is updated.
+                        # Reflect this in merged_offers.
+                        if offer_link_key in self.db.data: # Check if still exists
+                           merged_offers[offer_link_key] = self.db.data[offer_link_key]
+                        else: # Should not happen if read_offer_details is successful
+                           logger.warning(f"Offer {offer_link_key} disappeared after trying to read its details.")
+
+
+            if page < max_pages:
+                self.driver.get(f"{ALLEGRO_URL}?page={page + 1}")
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
+                )
+                human_delay()
+
+        # Update database with merged results
+        # This preserves all data for existing offers and adds new ones
+        self.db.data = merged_offers
+        self.db.save()
+        logger.info(
+            f"[Site] Finished refresh: {len(merged_offers)} live offers stored."
+        )
+
+    def __del__(self):
+        if self.driver is not None:
+            try:
+                self.driver.quit()
+                logger.info("[Scraper] Chrome WebDriver closed.")
+            except Exception as e:
+                logger.error(f"[Scraper] Error closing WebDriver: {e}")
+
+
+# ------------------------------------------------------------------------------
+# CLI Wrapper with Fire
+# ------------------------------------------------------------------------------
+class ScrapeExecutor:
+    """Handles actual execution of scraping commands.
+
+    This class is only instantiated when we need to perform real operations,
+    not during command introspection or help display.
+    """
+
+    def __init__(
+        self,
+        db: OfferDatabase,
+        verbose: bool = False,
+        dryrun: bool = False,
+        reset: bool = False,
+    ):
+        self.db = db
+        self.verbose = verbose
+        self.dryrun = dryrun
+        self.reset = reset
+        if verbose:
+            logging.getLogger().setLevel(logging.DEBUG)
+        if dryrun:
+            logger.info("[CLI] Running in dry-run mode - no changes will be made")
+        self.scraper = AllegroScraper(db, verbose, dryrun, reset)
+
+    def execute_fetch(self) -> None:
+        """Execute the list command."""
+        if self.dryrun:
+            logger.info("[DryRun] Would fetch offers from Allegrolokalnie")
+            return
+        self.scraper.fetch_offers()
+
+    def execute_read(self, offer_id: str) -> None:
+        """Execute the read command."""
+        if self.dryrun:
+            logger.info(f"[DryRun] Would read details for offer {offer_id}")
+            return
+        self.scraper.read_offer_details(offer_id)
+
+    def execute_set_title(self, offer_id: str, new_title: str | None) -> None:
+        """Execute the set-title command."""
+        if self.dryrun:
+            logger.info(
+                f"[DryRun] Would set title for offer {offer_id} to: {new_title}"
+            )
+            return
+        self.scraper.publish_offer_details(offer_id, new_title=new_title)
+
+    def execute_set_desc(self, offer_id: str, new_desc: str | None) -> None:
+        """Execute the set-desc command."""
+        if self.dryrun:
+            logger.info(
+                f"[DryRun] Would set description for offer {offer_id} to: {new_desc}"
+            )
+            return
+        self.scraper.publish_offer_details(offer_id, new_desc=new_desc)
+
+    def execute_read_all(self) -> None:
+        """Execute the read-all command."""
+        if self.dryrun:
+            logger.info("[DryRun] Would refresh all offers and their descriptions")
+            return
+        self.scraper.refresh_offers()
+
+    def execute_publish_all(self) -> None:
+        """Execute the publish-all command."""
+        if self.dryrun:
+            changes = []
+            for offer in self.db.data.values():
+                offer_id = offer.offer_id
+                if (
+                    offer_id
+                    and not offer.published
+                    and (offer.title_new or offer.desc_new)
+                ):
+                    changes.append(offer_id)
+            if changes:
+                logger.info(
+                    f"[DryRun] Would publish changes for offers: {', '.join(changes)}"
+                )
+                # Let the scraper handle each offer in dry-run mode
+                for offer_id in changes:
+                    self.scraper.publish_offer_details(offer_id)
+            else:
+                logger.info("[DryRun] No unpublished changes to publish")
+            return
+
+        for offer in list(self.db.data.values()):
+            offer_id = offer.offer_id
+            if offer_id and not offer.published and (offer.title_new or offer.desc_new):
+                self.scraper.publish_offer_details(offer_id)
+                human_delay(2.0, 4.0)
+
+    def execute_publish(self, offer_id: str) -> None:
+        """Execute the publish command for a specific offer."""
+        offer = self.db.get_offer(offer_id)
+        if not offer:
+            logger.error(f"[CLI] Offer {offer_id} not found in database")
+            return
+        if not (offer.title_new or offer.desc_new):
+            logger.info(f"[CLI] No pending changes for offer {offer_id}")
+            return
+
+        # Let the scraper handle dry-run mode to show template evaluation
+        self.scraper.publish_offer_details(offer_id)
+
+
+class VolanteCLI:
+    """Command-line interface for managing Allegrolokalnie offers.
+
+    This class provides methods to interact with Allegrolokalnie listings through a CLI.
+    It handles fetching, reading, updating and publishing offers while using a local JSON
+    database for persistence.
+
+    Global Options:
+        --verbose: Enable verbose logging output
+        --dryrun: Show what would be done without making actual changes
+        --reset: When fetching, reset title_new and desc_new to empty (default: False)
+
+    Methods:
+        fetch: Fetch and store active offers from Allegrolokalnie
+        read: Get description for a specific offer
+        set_title: Update an offer's title
+        set_desc: Update an offer's description
+        read_all: Refresh all offers and their descriptions
+        publish_all: Push pending changes for all modified offers
+        publish: Push pending changes for one specific offer
+    """
+
+    def __init__(
+        self,
+        verbose: Doc[bool, "Enable verbose logging"] = False,
+        dryrun: Doc[bool, "Show what would be done without making changes"] = False,
+        reset: Doc[bool, "Reset pending changes when fetching"] = False,
+    ):
+        """Initialize CLI with a JSON database matching the script's filename."""
+        self._db = OfferDatabase(Path(__file__).with_suffix(".toml"))
+        self.verbose = verbose
+        self.dryrun = dryrun
+        self.reset = reset
+        # No browser initialization here - that only happens in ScrapeExecutor
+
+    def fetch(self):
+        """Fetch all active offers from Allegrolokalnie and store them in the database.
+
+        This command:
+        1. Connects to Allegrolokalnie's active offers page
+        2. Scrapes all offer cards across all pages
+        3. Extracts offer details (title, price, views, etc.)
+        4. Stores the data in a local JSON database
+        """
+        executor = ScrapeExecutor(self._db, self.verbose, self.dryrun, self.reset)
+        executor.execute_fetch()
+        if not self.dryrun:
+            logger.debug(f"[CLI] Fetched and stored {len(self._db.data)} offers.")
+
+    def read(self, offer_id: Doc[str, "Unique identifier for the offer to read"]):
+        """Retrieve and store the detailed description for a specific offer.
+
+        Args:
+            offer_id: The offer's unique identifier from its URL
+
+        This command:
+        1. Loads the offer's detail page
+        2. Extracts the full description
+        3. Updates the offer's entry in the database
+        """
+        executor = ScrapeExecutor(self._db, self.verbose, self.dryrun, self.reset)
+        executor.execute_read(offer_id)
+
+    def set_title(
+        self,
+        offer_id: Doc[str, "Unique identifier for the offer to update"],
+        new_title: Doc[str | None, "New title text to set (optional)"] = None,
+    ):
+        """Update an offer's title on Allegrolokalnie.
+
+        Args:
+            offer_id: The offer's unique identifier from its URL
+            new_title: The new title to set. If None, uses title_new from database
+
+        This command:
+        1. Navigates to the offer's edit page
+        2. Updates the title field
+        3. Saves the changes on Allegrolokalnie
+        4. Updates the local database
+        """
+        executor = ScrapeExecutor(self._db, self.verbose, self.dryrun, self.reset)
+        executor.execute_set_title(offer_id, new_title)
+
+    def set_desc(
+        self,
+        offer_id: Doc[str, "Unique identifier for the offer to update"],
+        new_desc: Doc[str | None, "New description text to set (optional)"] = None,
+    ):
+        """Update an offer's description on Allegrolokalnie.
+
+        Args:
+            offer_id: The offer's unique identifier from its URL
+            new_desc: The new description to set. If None, uses desc_new from database
+
+        This command:
+        1. Navigates to the offer's edit page
+        2. Updates the description field
+        3. Saves the changes on Allegrolokalnie
+        4. Updates the local database
+        """
+        executor = ScrapeExecutor(self._db, self.verbose, self.dryrun, self.reset)
+        executor.execute_set_desc(offer_id, new_desc)
+
+    def read_all(self):
+        """Refresh all offers and their descriptions from Allegrolokalnie.
+
+        This command:
+        1. Fetches the current list of active offers
+        2. For new offers, retrieves their full descriptions
+        3. Removes offers no longer active on the site
+        4. Preserves existing descriptions and pending changes for unchanged offers
+        5. Updates the database with the merged results
+        """
+        executor = ScrapeExecutor(self._db, self.verbose, self.dryrun, self.reset)
+        executor.execute_read_all()
+
+    def publish_all(self):
+        """Publish all pending title and description changes to Allegrolokalnie.
+
+        This command:
+        1. Identifies offers with pending changes (title_new or desc_new)
+        2. For each modified offer:
+           - Navigates to its edit page
+           - Updates the relevant fields
+           - Saves the changes
+        3. Updates the local database to reflect the changes
+        """
+        executor = ScrapeExecutor(self._db, self.verbose, self.dryrun, self.reset)
+        executor.execute_publish_all()
+
+    def publish(self, offer_id: Doc[str, "Unique identifier for the offer to publish"]):
+        """Publish pending changes for a specific offer to Allegrolokalnie.
+
+        Args:
+            offer_id: The offer's unique identifier from its URL
+
+        This command:
+        1. Checks if the offer has pending changes
+        2. If changes exist:
+           - Navigates to the offer's edit page
+           - Updates the modified fields
+           - Saves the changes
+        3. Updates the local database to reflect the changes
+        """
+        executor = ScrapeExecutor(self._db, self.verbose, self.dryrun, self.reset)
+        executor.execute_publish(offer_id)
+
+
+# ------------------------------------------------------------------------------
+# Main Entrypoint
+# ------------------------------------------------------------------------------
+def main():
+    """Execute the AllegroCLI."""
+    fire.Fire(VolanteCLI)
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="tests/test_allegro_scraper.py">
+import pytest
+from unittest.mock import MagicMock, patch
+from bs4 import BeautifulSoup, Tag
+from datetime import datetime
+
+from src.volante_lokalnie.volante_lokalnie import AllegroScraper, OfferDatabase
+from src.volante_lokalnie.volante_lokalnie import BASE_URL # Import BASE_URL
+
+# Minimal OfferDatabase mock for scraper instantiation
+@pytest.fixture
+def mock_db():
+    db = MagicMock(spec=OfferDatabase)
+    db.data = {} # Scraper might try to read this
+    return db
+
+@pytest.fixture
+def scraper(mock_db):
+    # Scraper initialized with verbose=True for easier debugging of test failures if logs are captured
+    return AllegroScraper(db=mock_db, verbose=True, dryrun=False, reset=False)
+
+# --- Tests for _extract_offer_card_data ---
+
+def create_mock_card_tag(
+    offer_id="123",
+    title="Test Title",
+    price_str="123,45 zł",
+    views_str="Odsłony: 10",
+    date_iso="2023-01-01T12:00:00Z",
+    img_src="http://example.com/img.jpg",
+    offer_type_str="Kup Teraz",
+    base_url_in_href=False # If true, href will be full, otherwise relative
+) -> Tag:
+    """Helper to create a BeautifulSoup Tag object mimicking an offer card."""
+    href_val = f"{BASE_URL}/d/oferty/{offer_id}" if base_url_in_href else f"/d/oferty/{offer_id}"
+
+    html = f"""
+    <div class="my-offer-card">
+        <a itemprop="url" href="{href_val}">
+            <img itemprop="image" src="{img_src}" />
+        </a>
+        <div class="my-offer-card__title">
+            <a href="{href_val}">{title}</a>
+        </div>
+        <div><span itemprop="price">{price_str}</span></div>
+        <div class="m-t-1 m-b-1">{views_str}</div>
+        <time itemprop="startDate" datetime="{date_iso}"></time>
+        <div data-testid="offer-type-test">{offer_type_str}</div>
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    return soup.find("div", class_="my-offer-card")
+
+def test_extract_offer_card_data_success(scraper):
+    """Test successful extraction of data from a valid offer card."""
+    now_iso_utc = f"{datetime.utcnow().isoformat()}Z"
+    card_tag = create_mock_card_tag(
+        offer_id="test1",
+        title="Super Offer",
+        price_str="99,99 zł",
+        views_str="Odsłony: 123",
+        date_iso=now_iso_utc,
+        img_src="http://images.com/super.png",
+        offer_type_str="Licytacja"
+    )
+
+    expected_link = f"{BASE_URL}/d/oferty/test1"
+    expected_listing_date = datetime.fromisoformat(now_iso_utc.replace("Z", "+00:00")).isoformat()
+
+    result_link, offer_data = scraper._extract_offer_card_data(card_tag)
+
+    assert result_link == expected_link
+    assert offer_data.offer_id == "test1"
+    assert offer_data.title == "Super Offer"
+    assert offer_data.price == 99.99
+    assert offer_data.views == 123
+    assert offer_data.listing_date == expected_listing_date
+    assert offer_data.image_url == "http://images.com/super.png"
+    assert offer_data.offer_type == "Licytacja"
+
+def test_extract_offer_card_data_relative_url_handling(scraper):
+    """Test that relative URLs in href are correctly joined with BASE_URL."""
+    card_tag = create_mock_card_tag(offer_id="relative123", base_url_in_href=False)
+    expected_link = f"{BASE_URL}/d/oferty/relative123"
+
+    result_link, offer_data = scraper._extract_offer_card_data(card_tag)
+    assert result_link == expected_link
+    assert offer_data.offer_id == "relative123"
+
+def test_extract_offer_card_data_full_url_handling(scraper):
+    """Test that full URLs in href are handled correctly (though current create_mock_card_tag uses BASE_URL)."""
+    card_tag = create_mock_card_tag(offer_id="fullurl456", base_url_in_href=True) # href will include BASE_URL
+    expected_link = f"{BASE_URL}/d/oferty/fullurl456" # urljoin should handle this fine
+
+    result_link, offer_data = scraper._extract_offer_card_data(card_tag)
+    assert result_link == expected_link
+    assert offer_data.offer_id == "fullurl456"
+
+
+def test_extract_offer_card_data_missing_elements(scraper, caplog):
+    """Test robustness when some optional elements are missing from the card."""
+    # Create a card with several missing pieces of information
+    html_missing_data = """
+    <div class="my-offer-card">
+        <a itemprop="url" href="/d/oferty/missing_data_id"> <!-- Link and ID are essential -->
+            <!-- No image -->
+        </a>
+        <div class="my-offer-card__title">
+            <a><!-- No title text --></a>
+        </div>
+        <!-- No price -->
+        <!-- No views -->
+        <!-- No date -->
+        <!-- No offer type -->
+    </div>
+    """
+    soup = BeautifulSoup(html_missing_data, "html.parser")
+    card_tag_missing = soup.find("div", class_="my-offer-card")
+
+    result_link, offer_data = scraper._extract_offer_card_data(card_tag_missing)
+
+    assert result_link == f"{BASE_URL}/d/oferty/missing_data_id"
+    assert offer_data.offer_id == "missing_data_id"
+    assert offer_data.title == "Unknown Title" # Default
+    assert offer_data.price == 0.0 # Default due to parsing failure logged
+    assert offer_data.views == 0 # Default due to parsing failure logged
+    assert isinstance(offer_data.listing_date, str) # Should default to now()
+    assert offer_data.image_url == "" # Default
+    assert offer_data.offer_type == "Unknown" # Default
+
+    # Check logs for warnings about parsing issues
+    assert "Could not parse price '0' for offer missing_data_id" in caplog.text # price_text defaults to "0"
+    assert "Could not parse views '0' for offer missing_data_id" in caplog.text # views_text defaults to "0"
+    assert "Missing listing date for offer missing_data_id" in caplog.text
+
+
+def test_extract_offer_card_data_invalid_price_format(scraper, caplog):
+    card_tag = create_mock_card_tag(price_str="Not a price")
+    _, offer_data = scraper._extract_offer_card_data(card_tag)
+    assert offer_data.price == 0.0
+    assert "Could not parse price 'Not a price' for offer 123" in caplog.text
+
+def test_extract_offer_card_data_invalid_views_format(scraper, caplog):
+    card_tag = create_mock_card_tag(views_str="Odsłony: lots")
+    _, offer_data = scraper._extract_offer_card_data(card_tag)
+    assert offer_data.views == 0 # Default after failing to parse "lots"
+    assert "Could not parse views 'Odsłony: lots' for offer 123" in caplog.text
+
+
+def test_extract_offer_card_data_invalid_date_format(scraper, caplog):
+    card_tag = create_mock_card_tag(date_iso="not-an-iso-date")
+    _, offer_data = scraper._extract_offer_card_data(card_tag)
+    # listing_date will be datetime.now().isoformat(), so we just check a warning was logged
+    assert "Could not parse date 'not-an-iso-date' for offer 123" in caplog.text
+    # Verify it's a valid ISO date string (produced by datetime.now().isoformat())
+    try:
+        datetime.fromisoformat(offer_data.listing_date)
+    except ValueError:
+        pytest.fail("Default listing_date is not a valid ISO format string.")
+
+
+def test_extract_offer_card_data_no_link_element(scraper, caplog):
+    """Test behavior when the main link element is missing."""
+    html_no_link = """<div class="my-offer-card"></div>""" # Card without an <a> tag with itemprop="url"
+    soup = BeautifulSoup(html_no_link, "html.parser")
+    card_tag_no_link = soup.find("div", class_="my-offer-card")
+
+    result = scraper._extract_offer_card_data(card_tag_no_link)
+    assert result is None
+    assert "Offer card missing link element; skipping." in caplog.text
+
+def test_extract_offer_card_data_no_offer_id_from_link(scraper, caplog):
+    """Test behavior when offer ID cannot be extracted from the link."""
+    # Create a card with a link that won't yield an offer ID (e.g., just base_url)
+    html_bad_link = f"""
+    <div class="my-offer-card">
+        <a itemprop="url" href="{BASE_URL}/"></a>
+    </div>
+    """
+    soup = BeautifulSoup(html_bad_link, "html.parser")
+    card_tag_bad_link = soup.find("div", class_="my-offer-card")
+
+    result = scraper._extract_offer_card_data(card_tag_bad_link)
+    assert result is None
+    assert f"Could not extract offer_id from link {BASE_URL}/; skipping." in caplog.text
+
+# More tests can be added for edge cases in specific field extractions if complex logic exists there.
+# For example, if offer_type extraction involved more than just .text.strip().
+# Current implementation of _extract_offer_card_data is fairly straightforward with defaults.
+# TODO: Add tests for _get_max_pages
+# TODO: Add tests for _preprocess_html
+# TODO: Add tests for _wait_for_login (needs Selenium driver mock)
+# TODO: Add tests for fetch_offers, read_offer_details, publish_offer_details (complex, many mocks)
+# TODO: Add tests for refresh_offers
+# TODO: Add tests for _evaluate_template
+# TODO: Add tests for utility functions like ensure_debug_chrome (hard to test reliably)
+# TODO: Add tests for _setup_driver, _ensure_driver
+
+# Example for _evaluate_template - can be tested without full scraper setup
+def test_evaluate_template(scraper): # scraper fixture just to call the method
+    offer_dict_for_template = {
+        "title": "Old Title",
+        "desc": "Old Description",
+        "title_new": "New Title Template {views}", # Example with a placeholder
+        "desc_new": "New Desc Template {price}",
+        "views": 123, # Need to ensure these are in the dict for format
+        "price": 99.99
+    }
+
+    # Test with title_new template
+    template_str_title = offer_dict_for_template["title_new"]
+    evaluated_title = scraper._evaluate_template(template_str_title, offer_dict_for_template)
+    assert evaluated_title == "New Title Template 123"
+
+    # Test with desc_new template
+    template_str_desc = offer_dict_for_template["desc_new"]
+    evaluated_desc = scraper._evaluate_template(template_str_desc, offer_dict_for_template)
+    assert evaluated_desc == "New Desc Template 99.99"
+
+    # Test with no template (empty string)
+    assert scraper._evaluate_template("", offer_dict_for_template) == ""
+
+    # Test with template using non-existent key (should log error and return template)
+    with patch.object(scraper.logger, "error") as mock_log_error: # Assuming scraper uses self.logger
+        bad_template = "Template with {non_existent_key}"
+        result = scraper._evaluate_template(bad_template, offer_dict_for_template)
+        assert result == bad_template
+        mock_log_error.assert_called_once()
+        assert "Unknown placeholder" in mock_log_error.call_args[0][0]
+
+    # Test with current title/desc if new ones are empty
+    offer_dict_no_new = {
+        "title": "Current Title", "desc": "Current Desc", "title_new": "", "desc_new": ""
+    }
+    assert scraper._evaluate_template(offer_dict_no_new["title_new"], offer_dict_no_new) == ""
+    assert scraper._evaluate_template(offer_dict_no_new["desc_new"], offer_dict_no_new) == ""
+
+    # Test template using 'title' and 'desc'
+    template_using_title = "Based on {title}"
+    evaluated = scraper._evaluate_template(template_using_title, offer_dict_for_template)
+    assert evaluated == "Based on Old Title"
+
+    template_using_desc = "Based on {desc}"
+    evaluated_desc = scraper._evaluate_template(template_using_desc, offer_dict_for_template)
+    assert evaluated_desc == "Based on Old Description"
+
+# --- Tests for _preprocess_html ---
+def test_preprocess_html_converts_desc_h2(scraper):
+    """Test that <p class="desc-h2"> is converted to <h2>."""
+    raw_html = '<p class="desc-h2">Heading</p>'
+    processed_html = scraper._preprocess_html(raw_html)
+    # BeautifulSoup might add html/body tags, so check for the core transformation
+    assert "<h2>Heading</h2>" in processed_html.lower().replace(' class="desc-h2"', "") # Class should be removed
+
+def test_preprocess_html_cleans_desc_p(scraper):
+    """Test that class is removed from <p class="desc-p">."""
+    raw_html = '<p class="desc-p">Paragraph</p>'
+    processed_html = scraper._preprocess_html(raw_html)
+    assert "<h2>" not in processed_html.lower() # Make sure it's not mistaken for h2
+    assert "<p>Paragraph</p>" in processed_html.lower().replace(' class="desc-p"', "") # Class should be removed
+
+def test_preprocess_html_no_change_for_standard_tags(scraper):
+    """Test that standard HTML tags are preserved."""
+    raw_html = "<div><p>Standard paragraph.</p><h1>Standard H1</h1><ul><li>Item</li></ul></div>"
+    processed_html = scraper._preprocess_html(raw_html)
+    # Check if the core structure remains, accounting for minor auto-corrections by BeautifulSoup
+    # (e.g. lowercase tags, self-closing tags might be expanded)
+    # For simplicity, check for key content presence
+    assert "<p>Standard paragraph.</p>" in processed_html
+    assert "<h1>Standard H1</h1>" in processed_html # Case might change
+    assert "<li>Item</li>" in processed_html
+
+
+pytest_plugins = ["pytester"] # For caplog, etc.
+</file>
+
+<file path="tests/test_cli.py">
+import pytest
+from unittest.mock import patch, MagicMock
+
+# Adjust import paths as necessary
+from src.volante_lokalnie.volante_lokalnie import VolanteCLI, ScrapeExecutor, OfferDatabase, OfferData
+
+# To test VolanteCLI directly:
+# We need to mock OfferDatabase and ScrapeExecutor, or parts of them.
+
+@pytest.fixture
+def mock_offer_db_instance():
+    """Fixture for a mocked OfferDatabase instance."""
+    return MagicMock(spec=OfferDatabase)
+
+@pytest.fixture
+def mock_scrape_executor_instance():
+    """Fixture for a mocked ScrapeExecutor instance."""
+    return MagicMock(spec=ScrapeExecutor)
+
+@patch("src.volante_lokalnie.volante_lokalnie.OfferDatabase")
+@patch("src.volante_lokalnie.volante_lokalnie.ScrapeExecutor")
+def test_cli_fetch_command(MockScrapeExecutor, MockOfferDatabase, mock_offer_db_instance, mock_scrape_executor_instance):
+    """Test the 'fetch' command of VolanteCLI."""
+    MockOfferDatabase.return_value = mock_offer_db_instance
+    MockScrapeExecutor.return_value = mock_scrape_executor_instance
+
+    cli = VolanteCLI(verbose=True, dryrun=False, reset=True)
+    cli.fetch()
+
+    MockOfferDatabase.assert_called_once_with(MagicMock()) # Path(__file__).with_suffix(".toml") is tricky to assert directly without knowing the mock Path's behavior
+    # Check that ScrapeExecutor was initialized correctly
+    MockScrapeExecutor.assert_called_once_with(
+        mock_offer_db_instance,
+        verbose=True,
+        dryrun=False,
+        reset=True
+    )
+    # Check that the correct method on the executor was called
+    mock_scrape_executor_instance.execute_fetch.assert_called_once()
+
+@patch("src.volante_lokalnie.volante_lokalnie.OfferDatabase")
+@patch("src.volante_lokalnie.volante_lokalnie.ScrapeExecutor")
+def test_cli_read_command(MockScrapeExecutor, MockOfferDatabase, mock_offer_db_instance, mock_scrape_executor_instance):
+    """Test the 'read' command."""
+    MockOfferDatabase.return_value = mock_offer_db_instance
+    MockScrapeExecutor.return_value = mock_scrape_executor_instance
+
+    test_offer_id = "test_id_123"
+    cli = VolanteCLI(verbose=False, dryrun=True) # Different global args
+    cli.read(offer_id=test_offer_id)
+
+    MockScrapeExecutor.assert_called_once_with(
+        mock_offer_db_instance,
+        verbose=False,
+        dryrun=True,
+        reset=False # Default reset value
+    )
+    mock_scrape_executor_instance.execute_read.assert_called_once_with(test_offer_id)
+
+
+@patch("src.volante_lokalnie.volante_lokalnie.OfferDatabase")
+@patch("src.volante_lokalnie.volante_lokalnie.ScrapeExecutor")
+def test_cli_set_title_command(MockScrapeExecutor, MockOfferDatabase, mock_offer_db_instance, mock_scrape_executor_instance):
+    """Test the 'set_title' command."""
+    MockOfferDatabase.return_value = mock_offer_db_instance
+    MockScrapeExecutor.return_value = mock_scrape_executor_instance
+
+    test_offer_id = "id_for_title"
+    new_title = "A Brand New Title"
+    cli = VolanteCLI() # Defaults for global args
+    cli.set_title(offer_id=test_offer_id, new_title=new_title)
+
+    MockScrapeExecutor.assert_called_once_with(
+        mock_offer_db_instance,
+        verbose=False, dryrun=False, reset=False
+    )
+    mock_scrape_executor_instance.execute_set_title.assert_called_once_with(test_offer_id, new_title)
+
+@patch("src.volante_lokalnie.volante_lokalnie.OfferDatabase")
+@patch("src.volante_lokalnie.volante_lokalnie.ScrapeExecutor")
+def test_cli_set_desc_command(MockScrapeExecutor, MockOfferDatabase, mock_offer_db_instance, mock_scrape_executor_instance):
+    """Test the 'set_desc' command."""
+    MockOfferDatabase.return_value = mock_offer_db_instance
+    MockScrapeExecutor.return_value = mock_scrape_executor_instance
+
+    cli = VolanteCLI()
+    cli.set_desc(offer_id="id_for_desc", new_desc="A new description.")
+    mock_scrape_executor_instance.execute_set_desc.assert_called_once_with("id_for_desc", "A new description.")
+
+
+@patch("src.volante_lokalnie.volante_lokalnie.OfferDatabase")
+@patch("src.volante_lokalnie.volante_lokalnie.ScrapeExecutor")
+def test_cli_read_all_command(MockScrapeExecutor, MockOfferDatabase, mock_offer_db_instance, mock_scrape_executor_instance):
+    """Test the 'read_all' command."""
+    MockOfferDatabase.return_value = mock_offer_db_instance
+    MockScrapeExecutor.return_value = mock_scrape_executor_instance
+
+    cli = VolanteCLI()
+    cli.read_all()
+    mock_scrape_executor_instance.execute_read_all.assert_called_once()
+
+
+@patch("src.volante_lokalnie.volante_lokalnie.OfferDatabase")
+@patch("src.volante_lokalnie.volante_lokalnie.ScrapeExecutor")
+def test_cli_publish_all_command(MockScrapeExecutor, MockOfferDatabase, mock_offer_db_instance, mock_scrape_executor_instance):
+    """Test the 'publish_all' command."""
+    MockOfferDatabase.return_value = mock_offer_db_instance
+    MockScrapeExecutor.return_value = mock_scrape_executor_instance
+
+    cli = VolanteCLI()
+    cli.publish_all()
+    mock_scrape_executor_instance.execute_publish_all.assert_called_once()
+
+@patch("src.volante_lokalnie.volante_lokalnie.OfferDatabase")
+@patch("src.volante_lokalnie.volante_lokalnie.ScrapeExecutor")
+def test_cli_publish_command(MockScrapeExecutor, MockOfferDatabase, mock_offer_db_instance, mock_scrape_executor_instance):
+    """Test the 'publish' command for a specific offer."""
+    MockOfferDatabase.return_value = mock_offer_db_instance
+    MockScrapeExecutor.return_value = mock_scrape_executor_instance
+
+    cli = VolanteCLI()
+    cli.publish(offer_id="publish_this_one")
+    mock_scrape_executor_instance.execute_publish.assert_called_once_with("publish_this_one")
+
+
+# It might also be useful to test the __main__.py entry point using fire.Fire direct invocation
+# or by subprocess, but that's more of an integration test for the CLI parsing itself.
+# The tests above focus on VolanteCLI class logic.
+
+# To test ScrapeExecutor, one would mock AllegroScraper and OfferDatabase.
+# Example test structure for ScrapeExecutor:
+
+@patch("src.volante_lokalnie.volante_lokalnie.AllegroScraper")
+def test_scrape_executor_execute_fetch(MockAllegroScraper):
+    """Test ScrapeExecutor's execute_fetch method."""
+    mock_db = MagicMock(spec=OfferDatabase)
+    mock_scraper_instance = MockAllegroScraper.return_value # Get the instance mock
+
+    executor = ScrapeExecutor(db=mock_db, verbose=True, dryrun=False, reset=False)
+    executor.execute_fetch()
+
+    MockAllegroScraper.assert_called_once_with(mock_db, True, False, False)
+    mock_scraper_instance.fetch_offers.assert_called_once()
+
+@patch("src.volante_lokalnie.volante_lokalnie.AllegroScraper")
+def test_scrape_executor_execute_fetch_dryrun(MockAllegroScraper, caplog):
+    """Test ScrapeExecutor's execute_fetch method in dryrun mode."""
+    mock_db = MagicMock(spec=OfferDatabase)
+    mock_scraper_instance = MockAllegroScraper.return_value
+
+    executor = ScrapeExecutor(db=mock_db, dryrun=True)
+    executor.execute_fetch()
+
+    assert "[DryRun] Would fetch offers from Allegrolokalnie" in caplog.text
+    mock_scraper_instance.fetch_offers.assert_not_called()
+
+
+# Similar tests would be written for other execute_* methods of ScrapeExecutor,
+# checking that they call the correct AllegroScraper methods or log dryrun messages.
+# For publish_all, one might need to set up mock_db.data with some offers
+# to test the looping and conditional calls.
+# For example:
+@patch("src.volante_lokalnie.volante_lokalnie.AllegroScraper")
+def test_scrape_executor_publish_all_with_changes(MockAllegroScraper, caplog):
+    mock_db = MagicMock(spec=OfferDatabase)
+    mock_scraper_instance = MockAllegroScraper.return_value
+
+    offer1_mock = MagicMock(spec=OfferData)
+    offer1_mock.offer_id = "id1"
+    offer1_mock.published = False
+    offer1_mock.title_new = "New Title"
+    offer1_mock.desc_new = ""
+
+    offer2_mock = MagicMock(spec=OfferData)
+    offer2_mock.offer_id = "id2"
+    offer2_mock.published = True # Already published
+    offer2_mock.title_new = "Another New Title"
+    offer2_mock.desc_new = ""
+
+    offer3_mock = MagicMock(spec=OfferData)
+    offer3_mock.offer_id = "id3"
+    offer3_mock.published = False
+    offer3_mock.title_new = "" # No changes
+    offer3_mock.desc_new = ""
+
+
+    mock_db.data = {"url1": offer1_mock, "url2": offer2_mock, "url3": offer3_mock}
+    # When ScrapeExecutor iterates through db.data.values()
+    mock_db.data.values.return_value = [offer1_mock, offer2_mock, offer3_mock]
+
+
+    executor = ScrapeExecutor(db=mock_db, dryrun=False)
+    executor.execute_publish_all()
+
+    # Should only call publish_offer_details for offer1
+    mock_scraper_instance.publish_offer_details.assert_called_once_with("id1")
+
+    # Test dry run for publish_all
+    executor_dryrun = ScrapeExecutor(db=mock_db, dryrun=True)
+    executor_dryrun.execute_publish_all()
+    assert "[DryRun] Would publish changes for offers: id1" in caplog.text
+    # In dryrun, publish_offer_details is still called on the scraper,
+    # but the scraper's method itself should handle the dryrun.
+    # So, if scraper.publish_offer_details is called, it's up to its own dryrun logic.
+    # The current ScrapeExecutor dryrun for publish_all logs AND calls scraper.publish_offer_details.
+    # This means the scraper's publish_offer_details also needs to respect dryrun.
+    # The test above checks the ScrapeExecutor log.
+    # If scraper.publish_offer_details also logs, that would appear too.
+    # This implies that scraper.publish_offer_details should be called, and it has its own dryrun logic.
+    # Let's verify calls on the mock_scraper_instance for the dryrun case.
+    # It should be called once for "id1" even in dryrun, to allow template evaluation logging.
+    calls = [call for call in mock_scraper_instance.publish_offer_details.call_args_list if call[0][0] == "id1"]
+    assert len(calls) == 2 # Once for non-dryrun, once for dryrun. Or adjust if mock is reset.
+
+pytest_plugins = ["pytester"]
+</file>
+
+<file path="tests/test_offer_data.py">
+import pytest
+from pydantic import ValidationError
+from src.volante_lokalnie.volante_lokalnie import OfferData # Assuming OfferData is accessible here
+from datetime import datetime
+
+def test_offer_data_creation_valid():
+    """Test successful creation of OfferData with valid data."""
+    now_iso = datetime.now().isoformat()
+    data = {
+        "title": "Test Offer",
+        "price": 100.50,
+        "views": 10,
+        "listing_date": now_iso,
+        "image_url": "http://example.com/image.jpg",
+        "offer_type": "Buy Now",
+        "offer_id": "12345",
+        "title_new": "New Test Offer",
+        "desc": "Original description",
+        "desc_new": "New description",
+        "published": False,
+    }
+    offer = OfferData(**data)
+    for key, value in data.items():
+        assert getattr(offer, key) == value
+
+def test_offer_data_defaults():
+    """Test default values for optional fields."""
+    now_iso = datetime.now().isoformat()
+    required_data = {
+        "title": "Test Offer",
+        "price": 100.50,
+        "views": 10,
+        "listing_date": now_iso,
+        "image_url": "http://example.com/image.jpg",
+        "offer_type": "Buy Now",
+        "offer_id": "12345",
+    }
+    offer = OfferData(**required_data)
+    assert offer.title_new == ""
+    assert offer.desc == ""
+    assert offer.desc_new == ""
+    assert offer.published is False
+
+def test_offer_data_invalid_price_type():
+    """Test ValidationError when price is not a float."""
+    now_iso = datetime.now().isoformat()
+    with pytest.raises(ValidationError):
+        OfferData(
+            title="Test Offer",
+            price="not-a-float", # Invalid type
+            views=10,
+            listing_date=now_iso,
+            image_url="http://example.com/image.jpg",
+            offer_type="Buy Now",
+            offer_id="12345",
+        )
+
+def test_offer_data_missing_title():
+    """Test ValidationError when a required field (e.g., title) is missing."""
+    now_iso = datetime.now().isoformat()
+    with pytest.raises(ValidationError) as excinfo:
+        OfferData(
+            # title is missing
+            price=100.50,
+            views=10,
+            listing_date=now_iso,
+            image_url="http://example.com/image.jpg",
+            offer_type="Buy Now",
+            offer_id="12345",
+        )
+    assert "title" in str(excinfo.value).lower()
+
+
+def test_offer_data_price_can_be_int():
+    """Test that price can be an integer (Pydantic will convert to float)."""
+    now_iso = datetime.now().isoformat()
+    offer = OfferData(
+        title="Test Offer",
+        price=100, # Integer price
+        views=10,
+        listing_date=now_iso,
+        image_url="http://example.com/image.jpg",
+        offer_type="Buy Now",
+        offer_id="12345",
+    )
+    assert offer.price == 100.0
+    assert isinstance(offer.price, float)
+
+def test_offer_data_views_can_be_float_if_whole_number():
+    """Test that views can be a float if it's a whole number (Pydantic will convert to int)."""
+    # This behavior depends on Pydantic's strict mode or type coercion rules.
+    # By default, Pydantic v2 is more strict. Let's test if 'int' type allows float if it's whole.
+    # For `views: int`, Pydantic v2 in strict mode would reject 10.0.
+    # In non-strict (default), it might coerce if it's a whole number.
+    now_iso = datetime.now().isoformat()
+
+    # Test with a whole float
+    offer = OfferData(
+        title="Test Offer",
+        price=100.0,
+        views=10.0, # Float but whole number
+        listing_date=now_iso,
+        image_url="http://example.com/image.jpg",
+        offer_type="Buy Now",
+        offer_id="12345",
+    )
+    assert offer.views == 10
+    assert isinstance(offer.views, int)
+
+    # Test with a non-whole float - this should fail for `views: int`
+    with pytest.raises(ValidationError):
+        OfferData(
+            title="Test Offer",
+            price=100.0,
+            views=10.5, # Non-whole float
+            listing_date=now_iso,
+            image_url="http://example.com/image.jpg",
+            offer_type="Buy Now",
+            offer_id="12345",
+        )
+
+# TODO: Add more tests if there are specific validation rules in OfferData,
+# e.g., for offer_id format, image_url format, date string format (though Pydantic handles ISO well).
+# For now, OfferData is straightforward.
+</file>
+
+<file path="tests/test_offer_database.py">
+import pytest
+from unittest.mock import mock_open, patch
+import tomli
+import tomli_w
+
+# Adjust the import path based on your project structure
+from src.volante_lokalnie.volante_lokalnie import OfferDatabase, OfferData
+from datetime import datetime
+
+TEST_DB_PATH_STR = "test_db_file.toml" # In-memory path for tests
+
+@pytest.fixture
+def mock_offer_data_list(tmp_path):
+    """Provides a list of OfferData objects for testing."""
+    now_iso = datetime.now().isoformat()
+    return [
+        OfferData(title="Offer 1", price=10.0, views=1, listing_date=now_iso, image_url="img1.jpg", offer_type="t1", offer_id="id1"),
+        OfferData(title="Offer 2", price=20.0, views=2, listing_date=datetime(2023, 1, 1).isoformat(), image_url="img2.jpg", offer_type="t2", offer_id="id2"),
+    ]
+
+@pytest.fixture
+def sample_toml_content_dict(mock_offer_data_list):
+    """Provides a dictionary representation of offer data, similar to how it's stored in TOML."""
+    return {
+        f"http://example.com/offer/{offer.offer_id}": offer.model_dump(mode="json")
+        for offer in mock_offer_data_list
+    }
+
+@pytest.fixture
+def db_path_mock(tmp_path):
+    """ Mocks the Path object passed to OfferDatabase to use tmp_path """
+    # Create a dummy file path object that OfferDatabase will use
+    # OfferDatabase itself appends .toml, so provide the base name
+    return tmp_path / "test_volante_data"
+
+
+class TestOfferDatabase:
+
+    def test_init_loads_data_if_file_exists(self, db_path_mock, sample_toml_content_dict):
+        """Test database loads data from existing TOML file on init."""
+        toml_file_path = db_path_mock.with_suffix(".toml")
+        with open(toml_file_path, "wb") as f:
+            tomli_w.dump(sample_toml_content_dict, f)
+
+        db = OfferDatabase(db_path_mock)
+        assert len(db.data) == len(sample_toml_content_dict)
+        for url, offer_dict in sample_toml_content_dict.items():
+            assert url in db.data
+            assert db.data[url].offer_id == offer_dict["offer_id"]
+
+    def test_init_empty_if_file_not_exists(self, db_path_mock):
+        """Test database is empty if TOML file does not exist."""
+        # Ensure file does not exist (tmp_path is clean)
+        db = OfferDatabase(db_path_mock)
+        assert len(db.data) == 0
+
+    def test_init_handles_toml_decode_error(self, db_path_mock, caplog):
+        """Test database handles TOMLDecodeError during load."""
+        toml_file_path = db_path_mock.with_suffix(".toml")
+        with open(toml_file_path, "w") as f:
+            f.write("this is not valid toml content {{{{")
+
+        db = OfferDatabase(db_path_mock)
+        assert len(db.data) == 0
+        assert f"Failed to parse database {toml_file_path}" in caplog.text
+        assert "Starting with an empty database" in caplog.text
+
+    def test_init_handles_pydantic_validation_error_on_load(self, db_path_mock, sample_toml_content_dict, caplog):
+        """Test database handles Pydantic ValidationError if data in TOML is invalid for OfferData."""
+        # Make one entry invalid (e.g., price as string)
+        first_key = next(iter(sample_toml_content_dict.keys()))
+        sample_toml_content_dict[first_key]["price"] = "not-a-price"
+
+        toml_file_path = db_path_mock.with_suffix(".toml")
+        with open(toml_file_path, "wb") as f:
+            tomli_w.dump(sample_toml_content_dict, f)
+
+        db = OfferDatabase(db_path_mock)
+        # Depending on Pydantic behavior (raises on first or tries all),
+        # db.data might be empty or partially filled if it skips bad records.
+        # Current implementation seems to empty DB on any validation error during load.
+        assert len(db.data) == 0
+        assert f"Failed to parse database {toml_file_path}" in caplog.text # Pydantic error is caught by ValueError
+        assert "Starting with an empty database" in caplog.text
+
+
+    def test_save_data(self, db_path_mock, mock_offer_data_list):
+        """Test saving data to TOML file."""
+        db = OfferDatabase(db_path_mock) # Starts empty
+
+        # Populate db.data
+        for offer in mock_offer_data_list:
+            db.data[f"http://example.com/offer/{offer.offer_id}"] = offer
+
+        db.save()
+
+        toml_file_path = db_path_mock.with_suffix(".toml")
+        assert toml_file_path.exists()
+
+        with open(toml_file_path, "rb") as f:
+            loaded_data_raw = tomli.load(f)
+
+        assert len(loaded_data_raw) == len(mock_offer_data_list)
+        # Check if one item is correctly saved (implies others are too)
+        first_offer = mock_offer_data_list[0]
+        first_offer_url = f"http://example.com/offer/{first_offer.offer_id}"
+        assert loaded_data_raw[first_offer_url]["title"] == first_offer.title
+
+    def test_save_data_handles_io_error(self, db_path_mock, mock_offer_data_list, caplog):
+        """Test that save handles IOErrors gracefully."""
+        db = OfferDatabase(db_path_mock)
+        for offer in mock_offer_data_list:
+            db.data[f"http://example.com/offer/{offer.offer_id}"] = offer
+
+        # Patch open to raise an IOError
+        with patch("builtins.open", mock_open()) as mocked_open:
+            mocked_open.side_effect = OSError("Disk full")
+            db.save()
+
+        assert "File I/O error saving database" in caplog.text
+        assert "Disk full" in caplog.text
+
+
+    def test_get_offer_found(self, db_path_mock, mock_offer_data_list):
+        """Test get_offer when the offer exists."""
+        db = OfferDatabase(db_path_mock) # Empty
+
+        target_offer = mock_offer_data_list[0]
+        db.data[f"http://example.com/offer/{target_offer.offer_id}"] = target_offer
+
+        found_offer = db.get_offer(target_offer.offer_id)
+        assert found_offer is not None
+        assert found_offer.offer_id == target_offer.offer_id
+        assert found_offer.title == target_offer.title
+
+    def test_get_offer_not_found(self, db_path_mock, mock_offer_data_list):
+        """Test get_offer when the offer does not exist."""
+        db = OfferDatabase(db_path_mock) # Empty
+        for offer in mock_offer_data_list: # Populate with some data
+            db.data[f"http://example.com/offer/{offer.offer_id}"] = offer
+
+        found_offer = db.get_offer("non_existent_id_123")
+        assert found_offer is None
+
+    def test_data_sorting_on_load_and_save(self, db_path_mock):
+        """Test that data is sorted by listing_date (desc) after load and before save."""
+        offer_old = OfferData(title="Old", price=1, views=1, listing_date=datetime(2022,1,1).isoformat(), image_url="old.jpg", offer_type="t", offer_id="old_id")
+        offer_new = OfferData(title="New", price=1, views=1, listing_date=datetime(2023,1,1).isoformat(), image_url="new.jpg", offer_type="t", offer_id="new_id")
+        offer_mid = OfferData(title="Mid", price=1, views=1, listing_date=datetime(2022,6,1).isoformat(), image_url="mid.jpg", offer_type="t", offer_id="mid_id")
+
+        # Data to be written to file (unsorted by date)
+        data_to_write = {
+            "url_old": offer_old.model_dump(mode="json"),
+            "url_new": offer_new.model_dump(mode="json"),
+            "url_mid": offer_mid.model_dump(mode="json"),
+        }
+        toml_file_path = db_path_mock.with_suffix(".toml")
+        with open(toml_file_path, "wb") as f:
+            tomli_w.dump(data_to_write, f)
+
+        # Test sorting on load
+        db_loaded = OfferDatabase(db_path_mock)
+        loaded_ids_in_order = [offer.offer_id for offer in db_loaded.data.values()]
+        assert loaded_ids_in_order == ["new_id", "mid_id", "old_id"] # Newest first
+
+        # Test sorting on save
+        # Create a new DB, add data in a different order
+        db_to_save = OfferDatabase(db_path_mock.parent / "save_test_db") # Use a different path to avoid load
+        db_to_save.data = {
+            "url_mid": offer_mid,
+            "url_old": offer_old,
+            "url_new": offer_new,
+        }
+
+        # Mock tomli_w.dump to inspect the data passed to it
+        with patch("src.volante_lokalnie.volante_lokalnie.tomli_w.dump") as mock_tomli_dump:
+            db_to_save.save()
+            mock_tomli_dump.assert_called_once()
+            args, _ = mock_tomli_dump.call_args
+            data_dumped = args[0] # This is the dict passed to tomli_w.dump
+
+            # Check the order of keys in the dumped dictionary
+            dumped_ids_in_order = [offer_dict["offer_id"] for offer_dict in data_dumped.values()]
+            assert dumped_ids_in_order == ["new_id", "mid_id", "old_id"]
+
+    def test_load_empty_file(self, db_path_mock, caplog):
+        """Test loading an empty TOML file."""
+        toml_file_path = db_path_mock.with_suffix(".toml")
+        with open(toml_file_path, "w") as f:
+            f.write("") # Empty file
+
+        db = OfferDatabase(db_path_mock)
+        assert len(db.data) == 0
+        # An empty file is valid TOML (empty table) but might log a parse error if tomli expects non-empty.
+        # tomli.loads("") results in {}, so this should be fine.
+        # No error should be logged for an empty file if it's valid TOML.
+        # Let's check if any error IS logged.
+        assert all(level not in caplog.text for level in ["ERROR", "CRITICAL"])
+        assert f"Loaded 0 offers from {toml_file_path}" in caplog.text # or similar debug message for 0 items
+
+    # TODO: Test case for when file_path.exists() is true but reading it fails for other IO reasons (permissions?)
+    # This is harder to mock reliably without more specific mocks of Path object methods.
+    # The current FileNotFoundError and general Exception catch-alls in load() provide some coverage.
+
+    # TODO: Test case for save() when tomli_w.dump itself raises an unexpected error.
+    # The current general Exception catch-all in save() provides some coverage.
+pytest_plugins = ["pytester"]
+</file>
+
+<file path="tests/test_package.py">
+"""Test suite for volante_lokalnie."""
+
+def test_version():
+    """Verify package exposes version."""
+    import volante_lokalnie
+    assert volante_lokalnie.__version__
+</file>
+
+<file path=".gitignore">
+_Chutzpah*
+_deps
+_NCrunch_*
+_pkginfo.txt
+_Pvt_Extensions
+_ReSharper*/
+_TeamCity*
+_UpgradeReport_Files/
+!?*.[Cc]ache/
+!.axoCover/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!**/[Pp]ackages/build/
+!Directory.Build.rsp
+!dist/.gitkeep
+._*
+.*crunch*.local.xml
+.axoCover/*
+.builds
+.cache
+.coverage
+.coverage.*
+.cr/personal
+.DS_Store?
+.eggs/
+.env
+.fake/
+.history/
+.hypothesis/
+.idea/
+.installed.cfg
+.ionide/
+.localhistory/
+.mfractor/
+.nox/
+.ntvs_analysis.dat
+.paket/paket.exe
+.pytest_cache/
+.Python
+.ruff_cache/
+.sass-cache/
+.Spotlight-V100
+.tox/
+.Trashes
+.venv
+.vs/
+.vscode
+.vscode/
+.vscode/*
+.vshistory/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+[Bb]in/
+[Bb]uild[Ll]og.*
+[Dd]ebug/
+[Dd]ebugPS/
+[Dd]ebugPublic/
+[Ee]xpress/
+[Ll]og/
+[Ll]ogs/
+[Oo]bj/
+[Rr]elease/
+[Rr]eleasePS/
+[Rr]eleases/
+[Tt]est[Rr]esult*/
+[Ww][Ii][Nn]32/
+*_autogen/
+*_h.h
+*_i.c
+*_p.c
+*_wpftmp.csproj
+*- [Bb]ackup ([0-9]).rdl
+*- [Bb]ackup ([0-9][0-9]).rdl
+*- [Bb]ackup.rdl
+*.[Cc]ache
+*.[Pp]ublish.xml
+*.[Rr]e[Ss]harper
+*.a
+*.app
+*.appx
+*.appxbundle
+*.appxupload
+*.aps
+*.azurePubxml
+*.bim_*.settings
+*.bim.layout
+*.binlog
+*.btm.cs
+*.btp.cs
+*.build.csdef
+*.cab
+*.cachefile
+*.code-workspace
+*.cover
+*.coverage
+*.coveragexml
+*.d
+*.dbmdl
+*.dbproj.schemaview
+*.dll
+*.dotCover
+*.DotSettings.user
+*.dsp
+*.dsw
+*.dylib
+*.e2e
+*.egg
+*.egg-info/
+*.exe
+*.gch
+*.GhostDoc.xml
+*.gpState
+*.ilk
+*.iobj
+*.ipdb
+*.jfm
+*.jmconfig
+*.la
+*.lai
+*.ldf
+*.lib
+*.lo
+*.lock
+*.log
+*.mdf
+*.meta
+*.mm.*
+*.mod
+*.msi
+*.msix
+*.msm
+*.msp
+*.ncb
+*.ndf
+*.nuget.props
+*.nuget.targets
+*.nupkg
+*.nvuser
+*.o
+*.obj
+*.odx.cs
+*.opendb
+*.opensdf
+*.opt
+*.out
+*.pch
+*.pdb
+*.pfx
+*.pgc
+*.pgd
+*.pidb
+*.plg
+*.psess
+*.publishproj
+*.publishsettings
+*.pubxml
+*.py,cover
+*.py[cod]
+*.pyc
+*.rdl.data
+*.rptproj.bak
+*.rptproj.rsuser
+*.rsp
+*.rsuser
+*.sap
+*.sbr
+*.scc
+*.sdf
+*.sln.docstates
+*.sln.iml
+*.slo
+*.smod
+*.snupkg
+*.suo
+*.svclog
+*.swo
+*.swp
+*.tlb
+*.tlh
+*.tli
+*.tlog
+*.tmp
+*.tmp_proj
+*.tss
+*.user
+*.userosscache
+*.userprefs
+*.vbp
+*.vbw
+*.VC.db
+*.VC.VC.opendb
+*.VisualState.xml
+*.vsp
+*.vspscc
+*.vspx
+*.vssscc
+*.xsd.cs
+**/[Pp]ackages/*
+**/*.DesktopClient/GeneratedArtifacts
+**/*.DesktopClient/ModelManifest.xml
+**/*.HTMLClient/GeneratedArtifacts
+**/*.Server/GeneratedArtifacts
+**/*.Server/ModelManifest.xml
+*$py.class
+# Distribution / packaging
+# Environments
+# IDE
+# OS
+# Project specific
+# Python
+# Unit test / coverage reports
+~$*
+$tf/
+AppPackages/
+artifacts/
+ASALocalRun/
+AutoTest.Net/
+Backup*/
+BenchmarkDotNet.Artifacts/
+bld/
+build/
+BundleArtifacts/
+ClientBin/
+cmake_install.cmake
+CMakeCache.txt
+CMakeFiles
+CMakeLists.txt.user
+CMakeScripts
+CMakeUserPresets.json
+compile_commands.json
+cover/
+coverage.xml
+coverage*.info
+coverage*.json
+coverage*.xml
+csx/
+CTestTestfile.cmake
+develop-eggs/
+dlldata.c
+DocProject/buildhelp/
+DocProject/Help/*.hhc
+DocProject/Help/*.hhk
+DocProject/Help/*.hhp
+DocProject/Help/*.HxC
+DocProject/Help/*.HxT
+DocProject/Help/html
+DocProject/Help/Html2
+downloads/
+ecf/
+eggs/
+ehthumbs.db
+env.bak/
+env/
+ENV/
+FakesAssemblies/
+FodyWeavers.xsd
+Generated_Code/
+Generated\ Files/
+healthchecksdb
+htmlcov/
+install_manifest.txt
+ipch/
+lib/
+lib64/
+Makefile
+MANIFEST
+MigrationBackup/
+mono_crash.*
+nCrunchTemp_*
+node_modules/
+nosetests.xml
+nunit-*.xml
+OpenCover/
+orleans.codegen.cs
+Package.StoreAssociation.xml
+paket-files/
+parts/
+project.fragment.lock.json
+project.lock.json
+publish/
+PublishScripts/
+rcf/
+ScaffoldingReadMe.txt
+sdist/
+ServiceFabricBackup/
+StyleCopReport.xml
+Testing
+TestResult.xml
+Thumbs.db
+UpgradeLog*.htm
+UpgradeLog*.XML
+var/
+venv.bak/
+venv/
+wheels/
+x64/
+x86/
+.DS_Store
+src/volante_lokalnie/volante_lokalnie.toml
+</file>
+
+<file path=".pre-commit-config.yaml">
+default_language_version:
+  python: python3.12 # Specify default python version for hooks
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.5 # Updated Ruff version
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix] # Auto-fix and indicate if fixes were made
+      - id: ruff-format
+        args: [--respect-gitignore] # Format Python files
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0 # Updated pre-commit-hooks version
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=1024'] # Example: Set max file size to 1MB
+      - id: debug-statements
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-executables-have-shebangs
+      - id: check-merge-conflict
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.0 # Match MyPy version in pyproject.toml
+    hooks:
+      - id: mypy
+        args: [--config-file=pyproject.toml]
+        additional_dependencies: [ # Ensure mypy has access to project dependencies
+            "attrs>=25.3.0",
+            "beautifulsoup4>=4.13.4",
+            "certifi>=2025.6.15",
+            "charset-normalizer>=3.4.2",
+            "fire>=0.7.0",
+            "h11>=0.16.0",
+            "html2text>=2025.4.15",
+            "idna>=3.10",
+            "markdown-it-py>=3.0.0",
+            "packaging>=25.0",
+            "psutil>=7.0.0",
+            "pydantic>=2.8.2",
+            "pygments>=2.19.2",
+            "pysocks>=1.7.1",
+            "rich>=14.0.0",
+            "selenium>=4.23.0",
+            "sortedcontainers>=2.4.0",
+            "soupsieve>=2.7",
+            "tomli>=2.2.1",
+            "tomli-w>=1.2.0",
+            "trio>=0.30.0",
+            "trio-websocket>=0.12.2",
+            "urllib3>=2.0.0",
+            # Test dependencies for checking test files
+            "pytest>=8.4.1",
+            "pytest-cov>=6.2.1"
+        ]
+</file>
+
+<file path="LICENSE">
+MIT License
+
+Copyright (c) 2025 Adam Twardoch
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</file>
+
+<file path="package.toml">
+# Package configuration
+[package]
+include_cli = true        # Include CLI boilerplate
+include_logging = true    # Include logging setup
+use_pydantic = true      # Use Pydantic for data validation
+use_rich = true          # Use Rich for terminal output
+
+[features]
+mkdocs = false           # Enable MkDocs documentation
+vcs = true              # Initialize Git repository
+github_actions = true   # Add GitHub Actions workflows
+</file>
+
+<file path="pyproject.toml">
+# this_file: pyproject.toml
+[project]
+name = "volante_lokalnie"
+dynamic = ["version"]
+description = "A modern Python CLI tool for managing offers on Allegro Lokalnie"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+keywords = ["allegro", "lokalnie", "automation", "cli", "web-scraping"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+
+dependencies = [
+    "attrs>=25.3.0",
+    "beautifulsoup4>=4.13.4", # Minor update
+    "certifi>=2025.6.15", # Minor update
+    "charset-normalizer>=3.4.2", # Minor update
+    "fire>=0.7.0", # Keeping as is, seems specific
+    "h11>=0.16.0", # Minor update
+    "html2text>=2025.4.15", # Minor update
+    "idna>=3.10", # No change, latest is 3.7 but 3.10 is fine
+    "markdown-it-py>=3.0.0", # No change, latest
+    "packaging>=25.0", # Minor update
+    "psutil>=7.0.0", # Minor update
+    "pydantic>=2.8.2", # Updated to latest
+    "pygments>=2.19.2", # Minor update
+    "pysocks>=1.7.1", # No change, latest
+    "rich>=14.0.0", # Minor update
+    "selenium>=4.23.0", # Updated to latest
+    "sortedcontainers>=2.4.0", # No change, latest
+    "soupsieve>=2.7", # Minor update
+    "tomli>=2.2.1", # Minor update (for Python < 3.11)
+    "tomli-w>=1.2.0", # Minor update
+    "trio>=0.30.0", # Minor update
+    "trio-websocket>=0.12.2", # Minor update
+    "urllib3>=2.0.0", # Added explicitly, compatible with Selenium
+]
+
+
+[project.optional-dependencies]
+
+dev = [
+    "pre-commit>=4.2.0", # Minor update
+    "ruff>=0.5.5", # Updated to latest
+    "mypy>=1.11.0", # Updated to latest
+    "pyupgrade>=3.20.0", # Minor update
+]
+
+test = [
+    "pytest>=8.4.1", # Minor update
+    "pytest-cov>=6.2.1", # Minor update
+]
+
+
+all = [ # This can be used to install all optional dependencies
+    "volante_lokalnie[dev,test]"
+]
+
+[project.scripts]
+volante = "volante_lokalnie.__main__:main"
+
+
+
+[[project.authors]]
+name = "Adam Twardoch"
+email = "adam+github@twardoch.com"
+
+[project.urls]
+Documentation = "https://github.com/twardoch/volante_lokalnie#readme"
+Issues = "https://github.com/twardoch/volante_lokalnie/issues"
+Source = "https://github.com/twardoch/volante_lokalnie"
+
+
+[build-system]
+build-backend = "hatchling.build"
+requires = [
+    "hatchling>=1.21.0",
+    "hatch-vcs>=0.3.0"
+]
+
+
+[tool.coverage.paths]
+volante_lokalnie = ["src/volante_lokalnie", "*/volante_lokalnie/src/volante_lokalnie"]
+tests = ["tests", "*/volante_lokalnie/tests"]
+
+
+
+[tool.coverage.report]
+exclude_lines = [
+    "no cov",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+
+[tool.coverage.run]
+source_pkgs = ["volante_lokalnie", "tests"]
+branch = true
+parallel = true
+omit = [
+    "src/volante_lokalnie/__about__.py",
+]
+
+
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/volante_lokalnie/__version__.py"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/volante_lokalnie"]
+
+
+
+[tool.hatch.envs.default]
+dependencies = [
+]
+
+[[tool.hatch.envs.all.matrix]]
+python = ["3.10", "3.11", "3.12"]
+
+
+[tool.hatch.envs.default.scripts]
+test = "pytest {args:tests}"
+test-cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=src/volante_lokalnie --cov=tests {args:tests}"
+type-check = "mypy src/volante_lokalnie tests"
+lint = ["ruff check src/volante_lokalnie tests", "ruff format --respect-gitignore src/volante_lokalnie tests"]
+fix = ["ruff check  --fix --unsafe-fixes src/volante_lokalnie tests", "ruff format --respect-gitignore src/volante_lokalnie tests"]
+
+
+
+[tool.hatch.envs.lint]
+detached = true
+dependencies = [
+]
+
+
+[tool.hatch.envs.lint.scripts]
+typing = "mypy --install-types --non-interactive {args:src/volante_lokalnie tests}"
+style = ["ruff check {args:.}", "ruff format --respect-gitignore {args:.}"]
+fmt = ["ruff format --respect-gitignore {args:.}", "ruff check --fix {args:.}"]
+all = ["style", "typing"]
+
+
+[tool.hatch.envs.test]
+dependencies = [
+]
+
+[tool.hatch.envs.test.scripts]
+test = "python -m pytest -n auto -p no:briefcase {args:tests}"
+test-cov = "python -m pytest -n auto -p no:briefcase --cov-report=term-missing --cov-config=pyproject.toml --cov=src/volante_lokalnie --cov=tests {args:tests}"
+bench = "python -m pytest -v -p no:briefcase tests/test_benchmark.py --benchmark-only"
+bench-save = "python -m pytest -v -p no:briefcase tests/test_benchmark.py --benchmark-only --benchmark-json=benchmark/results.json"
+
+[tool.hatch.version]
+source = "vcs"
+
+
+[tool.hatch.version.raw-options]
+version_scheme = "post-release"
+
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = [
+    "A",
+    "ARG",
+    "B",
+    "C",
+    "DTZ",
+    "E",
+    "EM",
+    "F",
+    "FBT",
+    "I",
+    "ICN",
+    "ISC",
+    "N",
+    "PLC",
+    "PLE",
+    "PLR",
+    "PLW",
+    "Q",
+    "RUF",
+    "S",
+    "T",
+    "TID",
+    "UP",
+    "W",
+    "YTT",
+]
+ignore = [
+    "ARG001", # Unused function argument
+    "E501",   # Line too long (handled by formatter)
+    "I001",   # isort issues (handled by ruff format)
+    "RUF001", # String normalization (handled by ruff format)
+    "PLR2004",# Magic value used in comparison
+    "EXE003", # Shebang is present but file is not executable (might be fine for non-scripts)
+    "ISC001", # Implicitly concatenated string on one line (handled by ruff format)
+    "S101",   # Use of assert detected (allowed in tests)
+    "S311",   # Standard pseudo-random generators are not suitable for cryptographic purposes (random.uniform for human_delay is fine)
+    "S603",   # subprocess call: check for execution of untrusted input (CHROME_PATH is a constant)
+    "FBT001", # Boolean-typed positional argument in function definition
+    "FBT002", # Boolean default positional argument in function definition
+    "FBT003", # Boolean positional value in function call
+    "EM101",  # Exception must not use a string literal (will fix manually where appropriate)
+    "DTZ001", # datetime() called without a tzinfo argument (will review)
+    "DTZ003", # datetime.utcnow() used (will review)
+    "DTZ005", # datetime.now() called without a tz argument (will review)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Allow asserts in test files specifically, S101 is already in global ignore for now.
+# If S101 is removed from global ignore, this would be:
+# "tests/*" = ["S101"]
+# For volante_lokalnie.py, can add specific ignores if complexity rules are too strict after review
+"src/volante_lokalnie/volante_lokalnie.py" = ["PLR0912", "PLR0915", "C901"] # Allow higher complexity for now
+"src/volante_lokalnie/__main__.py" = ["PLC0415"] # Allow import inside try-except for CLI entry
+
+
+[tool.pytest.ini_options]
+addopts = "-v --durations=10 -p no:briefcase"
+asyncio_mode = "auto"
+console_output_style = "progress"
+filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
+log_cli = true
+log_cli_level = "INFO"
+markers = [
+  "benchmark: marks tests as benchmarks (select with '-m benchmark')",
+  "unit: mark a test as a unit test",
+  "integration: mark a test as an integration test",
+  "permutation: tests for permutation functionality",
+  "parameter: tests for parameter parsing",
+  "prompt: tests for prompt parsing",
+]
+norecursedirs = [
+  ".*",
+  "build",
+  "dist",
+  "venv",
+  "__pycache__",
+  "*.egg-info",
+  "_private",
+]
+
+python_classes = ["Test*"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+testpaths = ["tests"]
+
+
+[tool.pytest-benchmark]
+min_rounds = 100
+min_time = 0.1
+histogram = true
+storage = "file"
+save-data = true
+compare = [
+    "min",    # Minimum time
+    "max",    # Maximum time
+    "mean",   # Mean time
+    "stddev", # Standard deviation
+    "median", # Median time
+    "iqr",    # Inter-quartile range
+    "ops",    # Operations per second
+    "rounds", # Number of rounds
+]
+</file>
+
+<file path="README.md">
+# Volante Lokalnie
+
+A modern Python CLI tool for managing offers on Allegro Lokalnie, providing automation for common tasks like bulk updating listings and managing offer descriptions.
+
+## 🚀 TLDR
+
+```bash
+uv pip install git+https://github.com/twardoch/volante_lokalnie/
+python -m volante_lokalnie --help
+```
+
+## 🎯 Purpose & Background
+
+Allegro Lokalnie is a popular platform for local sales, but managing a large number of listings, especially for semi-professional sellers or those frequently rotating items, can become a significant time sink. Standard web interfaces are designed for manual, one-by-one operations. `volante_lokalnie` (meaning "flying locally" or "steering wheel locally") aims to provide a more efficient, programmatic way to interact with your Allegro Lokalnie offers.
+
+This tool was born out of the need to:
+- **Automate Repetitive Tasks:** Such as updating prices, descriptions, or titles across multiple offers based on templates or external data.
+- **Maintain Local Offer Data:** Keep a local, editable copy of offer details, allowing for offline editing and versioning if desired.
+- **Track Offer Performance:** Systematically fetch and store offer statistics like views.
+- **Reduce Manual Effort:** Minimize clicks and page navigation through a powerful command-line interface.
+- **Enable Scripting:** Allow integration of Allegro Lokalnie management into larger scripts or workflows.
+
+It leverages web scraping techniques to interact with the Allegro Lokalnie website, simulating browser actions to perform tasks that are not available via an official API for Allegro Lokalnie.
+
+**Disclaimer:** This tool relies on web scraping, which can be fragile and subject to break if the website structure changes. Use it responsibly and be aware of Allegro Lokalnie's terms of service. The tool includes delays to mimic human behavior but automating interactions with websites should always be done with caution.
+
+## ✨ Features
+
+- **Modern Python Stack:**
+  - Python 3.10+
+  - PEP 621 packaging with `pyproject.toml` and [Hatch](https://hatch.pypa.io/).
+  - Formatted with [Ruff](https://astral.sh/ruff) and type-checked with [MyPy](http://mypy-lang.org/).
+  - Fast dependency management with [uv](https://github.com/astral-sh/uv).
+  - Comprehensive (and growing) test suite using [Pytest](https://pytest.org/).
+  - CI/CD with GitHub Actions for linting, testing, and releases.
+  - Versioning based on Git tags via `hatch-vcs`.
+
+- **Core Offer Management:**
+  - `fetch`: Retrieve all active offers and store them locally.
+  - `read`: Get detailed description for a specific offer.
+  - `set-title`: Update an offer's title. Supports simple string templates.
+  - `set-desc`: Update an offer's description. Supports simple string templates.
+  - `read-all`: Refresh data for all offers, including their full descriptions.
+  - `publish`: Push pending local changes (title/description) for a specific offer to Allegro Lokalnie.
+  - `publish-all`: Push all pending local changes for all modified offers.
+
+- **Local Data Store:**
+  - Offers are stored in a human-readable TOML file (`volante_lokalnie.toml`) in the same directory as the script, allowing for easy inspection or manual edits if necessary.
+  - Tracks original and new (pending) titles and descriptions.
+
+- **Automation & Convenience:**
+  - **Templating:** Use placeholders like `{title}`, `{desc}`, `{price}`, `{views}` in `set-title` and `set_desc` commands to dynamically generate content. (Note: price/views are read-only from the site, but can be used in templates if you have them from other sources).
+  - **Dry-run Mode (`--dryrun`):** See what changes would be made without actually performing them.
+  - **Verbose Mode (`--verbose`):** Get detailed logging output for debugging.
+  - **Reset Mode (`--reset` with `fetch`):** Clear pending local changes (`title_new`, `desc_new`) when fetching offers.
+
+## 📦 Installation
+
+```bash
+Prerequisites:
+- Python 3.10+
+- `uv` (recommended) or `pip`
+- A running instance of Google Chrome (the tool will attempt to connect to it in debug mode).
+
+```bash
+# Using uv (recommended for speed)
+uv pip install git+https://github.com/twardoch/volante_lokalnie.git
+
+# Using pip
+pip install git+https://github.com/twardoch/volante_lokalnie.git
+```
+
+After installation, you can run the tool using `python -m volante_lokalnie` or simply `volante` if the script is installed to your PATH.
+
+```bash
+volante --help
+# or
+python -m volante_lokalnie --help
+```
+
+**Initial Setup - Chrome Debugging:**
+The tool uses Selenium to control a Chrome browser. It expects Chrome to be running with remote debugging enabled on port 9222.
+- On macOS, it will attempt to launch Chrome with the correct flags if it's not already running in debug mode at `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`.
+- On other systems, or if your Chrome is elsewhere, you might need to launch Chrome manually first:
+  ```bash
+  # Example for Linux
+  google-chrome --remote-debugging-port=9222 --no-first-run --no-default-browser-check
+  # Example for Windows
+  "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --no-first-run --no-default-browser-check
+  ```
+Modify the `CHROME_PATH` constant in the script if your Chrome executable is in a non-standard location and auto-detection fails.
+
+## 🔧 Usage
+
+The tool operates via commands and sub-commands. All commands interact with a local data file named `volante_lokalnie.toml` (created in the directory where you run the script, or where the script itself is located if run directly).
+
+### Global Options
+
+These options can be used with any command:
+- `--verbose`: Enables detailed debug logging. Useful for troubleshooting.
+  ```bash
+  volante --verbose fetch
+  ```
+- `--dryrun`: Simulates the command without making any actual changes to the website or the local database. Useful for testing.
+  ```bash
+  volante --dryrun publish-all
+  ```
+- `--reset`: Used with the `fetch` command. When fetching offers, if this flag is active, any pending local changes (new titles or descriptions stored in `title_new` or `desc_new` fields in the database) for existing offers will be cleared. Their `published` status will also be reset to `False`.
+  ```bash
+  volante --reset fetch
+  ```
+
+### Core Commands
+
+**1. `fetch`**
+   Fetches all your active offers from Allegro Lokalnie and stores their basic information (title, price, views, etc.) in the local `volante_lokalnie.toml` database. If the database file already exists, this command will update existing entries and add new ones. Offers no longer found online will be removed from the local database.
+   ```bash
+   volante fetch
+   ```
+   If you use `--reset` with `fetch`, any local un-published changes (`title_new`, `desc_new`) for offers that are re-fetched will be discarded.
+
+**2. `read <OFFER_ID>`**
+   Reads the full description for a specific offer from its Allegro Lokalnie page and stores it in the `desc` field in the local database. The `OFFER_ID` is the numerical ID from the offer's URL.
+   ```bash
+   volante read 12345678
+   ```
+
+**3. `read-all`**
+   Refreshes the list of active offers (like `fetch`) and then ensures that the full description for every active offer is present in the local database. If a description is missing for an offer, it will be fetched.
+   ```bash
+   volante read-all
+   ```
+
+**4. `set-title <OFFER_ID> "<NEW_TITLE_OR_TEMPLATE>"`**
+   Sets a new title for the specified offer. This new title is stored locally in the `title_new` field of the database and will be pushed to Allegro Lokalnie when `publish` or `publish-all` is used.
+   - The `<NEW_TITLE_OR_TEMPLATE>` can be a simple string or include placeholders like `{title}` (original title), `{price}`, `{views}`.
+   ```bash
+   volante set-title 12345678 "Awesome New Title - {price} PLN"
+   # To use the existing title_new from the database (e.g., if set manually in TOML):
+   volante set-title 12345678
+   ```
+   If no new title string is provided, it attempts to use the value already in `title_new` from the database.
+
+**5. `set-desc <OFFER_ID> "<NEW_DESC_OR_TEMPLATE>"`**
+   Sets a new description for the specified offer. Stored locally in `desc_new`.
+   - Supports placeholders like `{desc}` (original description), `{title}`, etc.
+   ```bash
+   volante set-desc 12345678 "This is a new description. Original was: {desc}"
+   # To use the existing desc_new from the database:
+   volante set-desc 12345678
+   ```
+
+**6. `publish <OFFER_ID>`**
+   Publishes pending local changes (from `title_new` and/or `desc_new`) for the specified offer to Allegro Lokalnie. After successful publishing, the `published` flag is set to `True` in the database, and the main `title` and `desc` fields are updated with the new content.
+   ```bash
+   volante publish 12345678
+   ```
+
+**7. `publish-all`**
+   Identifies all offers in the local database that have pending changes (`title_new` or `desc_new` is set and `published` is `False`) and publishes them one by one.
+   ```bash
+   volante publish-all
+   ```
+
+### Data Storage: `volante_lokalnie.toml`
+
+- The tool stores all offer data in a file named `volante_lokalnie.toml`. This file is typically created in the directory where you execute the `volante` command.
+- The file uses the TOML format, which is human-readable. You can inspect or even carefully edit this file.
+- Each offer is a key-value map, where the key is the offer's URL on Allegro Lokalnie.
+- Key fields for each offer include:
+  - `offer_id`: The unique numerical ID.
+  - `title`: The current title on Allegro.
+  - `price`, `views`, `listing_date`, `image_url`, `offer_type`: Basic offer info.
+  - `desc`: The full description from Allegro (in Markdown format).
+  - `title_new`: Your pending new title. Empty if no change is pending or after publishing.
+  - `desc_new`: Your pending new description. Empty if no change is pending or after publishing.
+  - `published`: `true` if pending changes have been published, `false` otherwise.
+
+## 🛠️ Development
+
+This project uses [Hatch](https://hatch.pypa.io/) for Python project and environment management. Pre-commit hooks are used for code quality.
+
+### Setup
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/twardoch/volante_lokalnie.git
+    cd volante_lokalnie
+    ```
+2.  **Install Hatch:**
+    ```bash
+    pip install hatch
+    # or using uv
+    uv pip install hatch
+    ```
+3.  **Activate development environment:**
+    Hatch will automatically create and manage a virtual environment.
+    ```bash
+    hatch shell
+    ```
+    This installs all dependencies, including development tools like `pytest`, `ruff`, `mypy`.
+
+### Running Quality Checks
+
+-   **Linting and Formatting (Ruff):**
+    ```bash
+    hatch run lint:style  # Run ruff check and format check
+    hatch run lint:fmt    # Run ruff format (auto-format) and ruff check --fix (auto-fix lint)
+    # Individual commands:
+    # hatch run ruff check .
+    # hatch run ruff format . --respect-gitignore
+    ```
+-   **Type Checking (MyPy):**
+    ```bash
+    hatch run lint:typing # Runs mypy
+    # or directly:
+    # hatch run mypy src tests --config-file pyproject.toml
+    ```
+-   **Run all linters configured in Hatch:**
+    ```bash
+    hatch run lint:all
+    ```
+
+### Running Tests
+
+-   **Run all tests (Pytest):**
+    ```bash
+    hatch run test
+    ```
+-   **Run tests with coverage:**
+    ```bash
+    hatch run test-cov
+    ```
+    A coverage report will be generated in `coverage.xml` and printed to the terminal.
+
+### Pre-commit Hooks
+
+The project is set up with pre-commit hooks (Ruff, MyPy, and others) to automatically check and format code before committing.
+1.  **Install pre-commit:**
+    ```bash
+    # If not already installed (typically installed via hatch env)
+    # pip install pre-commit
+    # uv pip install pre-commit
+    ```
+2.  **Install the git hooks:**
+    ```bash
+    pre-commit install
+    ```
+    Now, the hooks will run automatically on `git commit`. You can also run them manually:
+    ```bash
+    pre-commit run --all-files
+    ```
+
+## 🏛️ Codebase Structure & Technical Overview
+
+-   **`pyproject.toml`**: Defines project metadata, dependencies, and tool configurations (Hatch, Ruff, MyPy, Pytest) according to PEP 621.
+-   **`src/volante_lokalnie/`**: Main source code directory.
+    -   **`__init__.py`**: Package initializer.
+    -   **`__main__.py`**: Main CLI entry point, uses `fire` to expose `VolanteCLI`.
+    -   **`volante_lokalnie.py`**: Core logic.
+        -   `OfferData(BaseModel)`: Pydantic model for offer data structure and validation.
+        -   `OfferDatabase`: Handles loading/saving offer data to/from the TOML file.
+        -   `AllegroScraper`: Contains all Selenium-based web scraping logic to interact with Allegro Lokalnie (fetching offers, reading details, publishing changes).
+        -   `ScrapeExecutor`: A wrapper that initializes `AllegroScraper` only when an actual scraping command is run, preventing Selenium startup for help messages or simple CLI invocations. It translates CLI commands into calls to `AllegroScraper`.
+        -   `VolanteCLI`: Defines the command-line interface using `python-fire`. Methods in this class become CLI commands.
+    -   **`__version__.py`**: Version information, managed by `hatch-vcs`.
+-   **`tests/`**: Contains Pytest tests.
+    -   `test_package.py`: Basic package tests.
+    -   `test_offer_data.py`: Tests for the `OfferData` model.
+    -   `test_offer_database.py`: Tests for `OfferDatabase`.
+    -   `test_allegro_scraper.py`: Tests for `AllegroScraper` (especially helper methods; Selenium interaction tests are more complex).
+    -   `test_cli.py`: Tests for the CLI layer (`VolanteCLI`, `ScrapeExecutor`).
+-   **`.github/workflows/`**: GitHub Actions workflows for CI (testing, linting, building) and CD (releasing to PyPI).
+-   **`.pre-commit-config.yaml`**: Configuration for pre-commit hooks.
+
+### Data Flow Example: Publishing a Change
+
+1.  User runs `volante set-title <ID> "New Title"`.
+2.  `VolanteCLI.set_title()` is called.
+3.  It instantiates `ScrapeExecutor`.
+4.  `ScrapeExecutor.execute_set_title()` is called.
+    -   This method internally uses `AllegroScraper.publish_offer_details()` but only to set the title *locally in the database* if `publish_offer_details` is smart enough, or it updates `db.data[offer_key].title_new = "New Title"` and `db.save()`. *Correction based on current code: `set-title` calls `publish_offer_details` which directly tries to publish if not dryrun, after updating the local `title_new` field. This is slightly different from just staging it.* The `publish_offer_details` method is responsible for both staging the change (by setting `title_new` or `desc_new` on the OfferData model) and then performing the web submission.
+5.  User runs `volante publish <ID>`.
+6.  `VolanteCLI.publish()` calls `ScrapeExecutor.execute_publish()`.
+7.  `ScrapeExecutor.execute_publish()` calls `AllegroScraper.publish_offer_details()`.
+8.  `AllegroScraper.publish_offer_details()`:
+    a.  Navigates to the offer edit page using Selenium.
+    b.  Retrieves `title_new` and `desc_new` from the `OfferData` model for that offer.
+    c.  Evaluates any templates in them.
+    d.  Fills the title and/or description fields on the web page.
+    e.  Navigates through the multi-step submission process (description form, details form, highlight page, summary page).
+    f.  If successful, updates the local `OfferData` (e.g., sets `published=True`, copies `title_new` to `title`) and calls `read_offer_details()` to refresh data from the site.
+    g.  Saves the database.
+
+### Web Scraping Approach
+
+-   **Selenium:** The primary tool for browser automation. `volante_lokalnie` controls a Chrome browser instance.
+-   **Debugging Port:** It connects to Chrome via its remote debugging port (default 9222). This allows interaction with an existing browser session where the user is already logged in.
+-   **Login:** The script requires the user to be manually logged into Allegro Lokalnie in the controlled browser instance. It includes a step to wait for the user to log in and navigate to the active offers page.
+-   **Selectors:** Uses CSS selectors (and occasionally XPath) to find elements on web pages. These can be brittle if the website structure changes.
+-   **Human-like Delays:** Small random delays (`human_delay()`) are inserted between actions to reduce the chance of being flagged as a bot.
+-   **HTML Parsing:** `BeautifulSoup4` is used to parse page content obtained from Selenium.
+-   **Markdown Conversion:** `html2text` is used to convert offer descriptions from HTML to Markdown for local storage.
+
+## 🤝 Contributing
+
+Contributions are welcome! Whether it's bug reports, feature suggestions, documentation improvements, or code contributions, please feel free to open an issue or a pull request.
+
+### Contribution Workflow
+
+1.  **Fork the repository** on GitHub.
+2.  **Clone your fork** locally: `git clone https://github.com/YOUR_USERNAME/volante_lokalnie.git`
+3.  **Create a new branch** for your changes: `git checkout -b feature/your-feature-name` or `bugfix/issue-number`.
+4.  **Set up the development environment** as described in the "Development" section (using Hatch and pre-commit).
+5.  **Make your changes.** Ensure you add or update tests for your changes.
+6.  **Run linters and tests:** `hatch run lint:all` and `hatch run test-cov`.
+7.  **Commit your changes:** `git commit -m "Your descriptive commit message"`
+8.  **Push to your fork:** `git push origin feature/your-feature-name`
+9.  **Open a Pull Request** from your fork's branch to the `main` branch of the original `twardoch/volante_lokalnie` repository. Provide a clear description of your changes.
+
+### Coding Standards
+
+-   Follow PEP 8 guidelines (Ruff helps enforce this).
+-   Write clear, readable code with type hints.
+-   Ensure MyPy passes without errors.
+-   Add unit tests for new functionality.
+-   Keep documentation (README, docstrings) updated.
+
+## 📄 License
+
+MIT License - See [LICENSE](LICENSE) file for details.
+
+## 📝 Author
+
+Adam Twardoch ([@twardoch](https://github.com/twardoch)) - (adam+github@twardoch.com)
+
+## 🔗 Links
+
+- [Documentation](https://github.com/twardoch/volante_lokalnie#readme) (You are here)
+- [Issue Tracker](https://github.com/twardoch/volante_lokalnie/issues)
+- [Source Code](https://github.com/twardoch/volante_lokalnie)
+</file>
+
+</files>
