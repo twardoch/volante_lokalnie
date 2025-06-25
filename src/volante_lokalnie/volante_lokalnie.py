@@ -90,10 +90,10 @@ def ensure_debug_chrome() -> None:
         logger.debug("[yellow]Chrome debugging process already running[/yellow]")
         return
     logger.debug("Launching Chrome with remote debugging enabled...")
-    tempfile.mkdtemp()
+    # tempfile.mkdtemp() # This was unused, temp_dir was not defined for user-data-dir
     subprocess.Popen(
         [
-            CHROME_PATH,
+            CHROME_PATH, # TODO: Make CHROME_PATH configurable or auto-detected for other OS
             f"--remote-debugging-port={DEBUG_PORT}",
             "--no-first-run",
             "--no-default-browser-check",
@@ -311,93 +311,14 @@ class AllegroScraper:
         raise TimeoutError("Login timeout exceeded (5 minutes). Please try again.")
 
     def fetch_offers(self) -> None:
-        """Fetch offer data from the website and update the local database."""
-        self._ensure_driver()
-        logger.debug("Starting to fetch offers from website...")
-        self.driver.get(ALLEGRO_URL)
+        """Fetch offer data from the website, applying reset logic for pending changes.
+        This is a convenience wrapper around refresh_offers.
+        """
+        logger.info("Starting fetch_offers operation (will call refresh_offers with reset).")
+        # self.reset is passed during Scraper initialization from CLI
+        self.refresh_offers(reset_pending_changes=self.reset, fetch_missing_descriptions=False)
+        logger.info("fetch_offers operation completed via refresh_offers.")
 
-        # Add manual login wait here
-        self._wait_for_login()
-
-        # Continue with existing code...
-        WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
-        )
-        max_pages = self._get_max_pages()
-        # This dictionary will hold all offers found in the current scrape session.
-        # It will become the new self.db.data at the end.
-        live_offers_on_site: dict[str, OfferData] = {}
-
-        for page_num in range(1, max_pages + 1):
-            logger.info(f"[Site] Processing page {page_num} of {max_pages}...")
-
-            # Navigate to the correct page if not the first page (already on page 1)
-            if page_num > 1:
-                self.driver.get(f"{ALLEGRO_URL}?page={page_num}")
-                WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
-                )
-                human_delay()
-
-            soup = BeautifulSoup(self.driver.page_source, "html.parser")
-            offer_cards_on_page = soup.find_all("div", class_="my-offer-card")
-
-            if not offer_cards_on_page:
-                logger.warning(f"[Site] No offers found on page {page_num}. This might be the end or an issue.")
-                break # Stop if a page is empty
-
-            for card_html in offer_cards_on_page:
-                # _extract_offer_card_data parses a single card and returns OfferData
-                # It should not interact with the database.
-                parsed_result = self._extract_offer_card_data(card_html)
-
-                if parsed_result:
-                    offer_link_key, fresh_data_from_card = parsed_result
-
-                    # Check if this offer was already in our database from a previous run
-                    if offer_link_key in self.db.data:
-                        # It exists. We update the existing OfferData model with fresh basic info.
-                        # Custom fields (desc, desc_new, title_new, published) are preserved unless reset.
-                        existing_model_in_db = self.db.data[offer_link_key]
-
-                        # Update core fields from the newly scraped card data
-                        existing_model_in_db.title = fresh_data_from_card.title
-                        existing_model_in_db.price = fresh_data_from_card.price
-                        existing_model_in_db.views = fresh_data_from_card.views
-                        existing_model_in_db.listing_date = fresh_data_from_card.listing_date
-                        existing_model_in_db.image_url = fresh_data_from_card.image_url
-                        existing_model_in_db.offer_type = fresh_data_from_card.offer_type
-                        # offer_id should be the same.
-
-                        if self.reset:
-                            logger.debug(f"[DB] Resetting editable fields for offer ID {existing_model_in_db.offer_id}")
-                            existing_model_in_db.title_new = ""
-                            # Note: existing_model_in_db.desc (original description) is NOT reset here.
-                            # Fetching with --reset clears pending changes (title_new, desc_new)
-                            # and published status. It does not erase known original descriptions.
-                            existing_model_in_db.desc_new = ""
-                            existing_model_in_db.published = False
-
-                        live_offers_on_site[offer_link_key] = existing_model_in_db
-                    else:
-                        # This is a new offer not seen before.
-                        # Ensure 'published' and editable fields are default/empty.
-                        fresh_data_from_card.published = False
-                        fresh_data_from_card.title_new = ""
-                        fresh_data_from_card.desc = "" # Original description is empty until read by `read` or `read_all`
-                        fresh_data_from_card.desc_new = ""
-                        live_offers_on_site[offer_link_key] = fresh_data_from_card
-
-            logger.debug(f"[Site] Processed {len(offer_cards_on_page)} cards on page {page_num}. Total live offers found so far: {len(live_offers_on_site)}")
-
-        # After processing all pages, replace the database content with the live offers found.
-        # Offers that were in self.db.data but not in live_offers_on_site are effectively removed (no longer active).
-        self.db.data = live_offers_on_site
-        self.db.save()
-
-        logger.info(
-            f"[Site] Fetch operation complete. Database updated with {len(self.db.data)} currently active offers."
-        )
 
     def _extract_offer_card_data(self, card: Tag) -> tuple[str, OfferData] | None:
         """Extracts offer data from a single offer card HTML element. Does not interact with DB."""
@@ -412,7 +333,11 @@ class AllegroScraper:
 
             href = cast(str, link_elem["href"])
             offer_link = urljoin(BASE_URL, href)
-            offer_id = offer_link.split("/")[-1] # TODO: ensure this is robust
+            # TODO: Ensure this offer_id extraction is robust. Currently takes the last URL path segment.
+            # This means CLI commands requiring an offer_id expect this full segment.
+            # If a shorter canonical ID exists (e.g., "o12345"), extraction should target that,
+            # and user interaction should consistently use that canonical ID. For MVP, this is deferred.
+            offer_id = offer_link.split("/")[-1]
 
             if not offer_id:
                 logger.warning(f"Could not extract offer_id from link {offer_link}; skipping.")
@@ -716,6 +641,60 @@ class AllegroScraper:
 
         return None
 
+    def stage_offer_details(
+        self,
+        offer_id: str,
+        new_title_template: str | None = None,
+        new_desc_template: str | None = None
+    ) -> bool:
+        """Stage new title or description templates locally in the database.
+
+        This method updates the `title_new` or `desc_new` fields for the offer
+        with the provided template strings. It does not evaluate the templates
+        or interact with the website. It also sets the `published` flag to False.
+
+        Args:
+            offer_id: The ID of the offer to update.
+            new_title_template: The new title template string.
+            new_desc_template: The new description template string.
+
+        Returns:
+            True if the offer was found and updated, False otherwise.
+        """
+        offer_model = self.db.get_offer(offer_id)
+        if not offer_model:
+            logger.error(f"[Stage] Offer {offer_id} not in database.")
+            return False
+
+        updated = False
+        if new_title_template is not None:
+            offer_model.title_new = new_title_template
+            logger.info(f"[Stage] Staged new title template for offer {offer_id}: '{new_title_template}'")
+            updated = True
+
+        if new_desc_template is not None:
+            offer_model.desc_new = new_desc_template
+            logger.info(f"[Stage] Staged new description template for offer {offer_id}: '{new_desc_template[:100]}...'")
+            updated = True
+
+        if updated:
+            offer_model.published = False # Mark that there are unpublished changes
+            # Find the offer_link_key to update the correct entry in self.db.data
+            offer_link_key = next((url for url, data in self.db.data.items() if data.offer_id == offer_id), None)
+            if offer_link_key:
+                self.db.data[offer_link_key] = offer_model
+                self.db.save()
+                logger.debug(f"[Stage] Offer {offer_id} updated in database with new templates and unpublished status.")
+            else:
+                # This case should ideally not happen if get_offer returned a model
+                logger.error(f"[Stage] Could not find offer_link_key for offer {offer_id} after retrieving model. DB might be inconsistent.")
+                return False
+        else:
+            logger.info(f"[Stage] No new title or description template provided for offer {offer_id}.")
+
+        return updated
+
+
     def _evaluate_template(self, template: str, offer: dict) -> str:
         """Evaluate a template string containing {desc}, {title}, etc. placeholders.
 
@@ -729,13 +708,16 @@ class AllegroScraper:
         if not template:
             return template
 
-        # Create a context with all possible variables
-        context = {
-            "desc": offer.get("desc", ""),
-            "title": offer.get("title", ""),
-            "title_new": offer.get("title_new", ""),
-            "desc_new": offer.get("desc_new", ""),
-        }
+        # Create a context with all possible variables from the offer dictionary
+        # This allows templates to use any field from the OfferData model.
+        # Example: {title}, {price}, {views}, {offer_id}, {listing_date}, {desc}, etc.
+        # We provide default empty strings for safety, though model_dump should provide all keys.
+        context = {key: offer.get(key, "") for key in OfferData.model_fields.keys()}
+
+        # Ensure title_new and desc_new in context refer to the template values themselves,
+        # not just what might be in the offer dict if it was already evaluated (should not happen here).
+        # The offer dict passed should be from `offer_model.model_dump()`.
+        # `offer.get("title_new", "")` and `offer.get("desc_new", "")` are correct for this.
 
         try:
             return template.format(**context)
@@ -746,15 +728,11 @@ class AllegroScraper:
             logger.error(f"[Template] Error evaluating template: {e}")
             return template
 
-    def publish_offer_details(
-        self,
-        offer_id: str,
-        new_title: str | None = None,
-        new_desc: str | None = None,
-    ) -> bool:
+    def publish_offer_details(self, offer_id: str) -> bool:
         """
-        Publish the title and/or description changes to the offer on the website.
+        Publish staged title and/or description changes for the offer to the website.
         This involves navigating the multi-step edit process on Allegro Lokalnie.
+        It reads title_new and desc_new templates from the database.
         """
         self._ensure_driver()
         offer_model = self.db.get_offer(offer_id)
@@ -762,14 +740,18 @@ class AllegroScraper:
             logger.error(f"[Publish] Offer {offer_id} not in database.")
             return False
 
+        if not offer_model.title_new and not offer_model.desc_new:
+            logger.info(f"[Publish] No staged changes (title_new or desc_new) for offer {offer_id}. Nothing to publish.")
+            # Optionally, ensure 'published' is true if no pending changes, or leave as is.
+            # For now, if user explicitly calls publish, and there's nothing, it's just an info.
+            return True # Indicate "success" as there's nothing to do.
+
         try:
             # Step 1: Navigate to the offer's description edit page
             self._navigate_to_offer_edit_page(offer_id)
 
-            # Step 2: Update title and description fields if changes are pending
-            title_to_set, desc_to_set = self._prepare_title_and_desc_for_publish(
-                offer_model, new_title, new_desc
-            )
+            # Step 2: Determine what to set based on staged templates
+            title_to_set, desc_to_set = self._prepare_title_and_desc_for_publish(offer_model)
 
             made_title_change = False
             if title_to_set is not None:
@@ -821,31 +803,34 @@ class AllegroScraper:
         logger.debug(f"[Publish] Reached edit page for offer {offer_id}.")
 
     def _prepare_title_and_desc_for_publish(
-        self, offer: OfferData, new_title_arg: str | None, new_desc_arg: str | None
+        self, offer: OfferData
     ) -> tuple[str | None, str | None]:
-        """Determines the actual title and description to set, evaluating templates if needed."""
+        """
+        Determines the actual title and description to set for publishing,
+        by evaluating templates stored in offer.title_new and offer.desc_new.
+        Returns a tuple (evaluated_title_to_set | None, evaluated_desc_to_set | None).
+        A value is None if the template is empty or evaluates to the current live value.
+        """
         title_to_set: str | None = None
-        final_title_str = new_title_arg or offer.title_new
-        if final_title_str:
-            evaluated_title = self._evaluate_template(final_title_str, offer.model_dump())
+        if offer.title_new: # If there's a new title template
+            evaluated_title = self._evaluate_template(offer.title_new, offer.model_dump())
             if evaluated_title != offer.title:
                 logger.info(f"[Publish] Will update title for {offer.offer_id}. Old: '{offer.title}', New: '{evaluated_title}'")
                 title_to_set = evaluated_title
             else:
-                logger.debug(f"[Publish] Title for {offer.offer_id} is already up-to-date.")
+                logger.debug(f"[Publish] Staged title for {offer.offer_id} is the same as current. No title change needed.")
 
         desc_to_set: str | None = None
-        final_desc_str = new_desc_arg or offer.desc_new
-        if final_desc_str:
-            evaluated_desc = self._evaluate_template(final_desc_str, offer.model_dump())
-            current_desc_for_compare = offer.desc if offer.desc != "-" else ""
+        if offer.desc_new: # If there's a new description template
+            evaluated_desc = self._evaluate_template(offer.desc_new, offer.model_dump())
+            current_desc_for_compare = offer.desc if offer.desc != "-" else "" # Treat "-" as empty for comparison
             if evaluated_desc != current_desc_for_compare:
                 logger.info(f"[Publish] Will update description for {offer.offer_id}.")
                 if self.verbose:
                     logger.debug(f"Old desc:\n{current_desc_for_compare[:200]}...\nNew desc:\n{evaluated_desc[:200]}...")
                 desc_to_set = evaluated_desc
             else:
-                logger.debug(f"[Publish] Description for {offer.offer_id} is already up-to-date.")
+                logger.debug(f"[Publish] Staged description for {offer.offer_id} is the same as current. No description change needed.")
 
         return title_to_set, desc_to_set
 
@@ -862,10 +847,8 @@ class AllegroScraper:
         human_delay(0.3, 0.7)
         title_input.send_keys(title_to_set)
 
-        # Update local DB immediately for title_new (actual value set)
-        offer_link_key = next(url for url, data in self.db.data.items() if data.offer_id == offer_id)
-        self.db.data[offer_link_key].title_new = title_to_set # Store the evaluated title
-        self.db.save()
+        # DO NOT update title_new here with evaluated content.
+        # title_new should remain the template. It's cleared in _finalize_successful_publish.
 
     def _fill_offer_description(self, offer_id: str, desc_to_set: str) -> None:
         """Fills the description field on the offer edit page."""
@@ -881,10 +864,8 @@ class AllegroScraper:
         human_delay(0.3, 0.7)
         desc_editor.send_keys(desc_to_set)
 
-        # Update local DB immediately for desc_new (actual value set)
-        offer_link_key = next(url for url, data in self.db.data.items() if data.offer_id == offer_id)
-        self.db.data[offer_link_key].desc_new = desc_to_set # Store the evaluated description
-        self.db.save()
+        # DO NOT update desc_new here with evaluated content.
+        # desc_new should remain the template. It's cleared in _finalize_successful_publish.
 
     def _submit_description_form(self) -> None:
         """Clicks the submit button on the description edit page."""
@@ -975,14 +956,17 @@ class AllegroScraper:
         # It's better to re-read the offer to get the canonical data from the site
         # But for now, just mark as published and clear pending.
         # The `read_offer_details` call below will refresh it.
+        # However, title_new and desc_new should be cleared here as they represent pending changes.
+        # `read_offer_details` primarily updates `desc`, and `title` is updated from card parsing.
 
-        self.db.data[offer_link_key].published = True
-        # Clearing title_new and desc_new after successful publish might be good,
-        # but read_offer_details should ideally fetch the new state.
-        # Let's rely on read_offer_details to update them.
-        self.db.save()
+        offer_to_finalize = self.db.data[offer_link_key]
+        offer_to_finalize.title_new = ""
+        offer_to_finalize.desc_new = ""
+        offer_to_finalize.published = True
 
-        logger.info(f"[Publish] Refreshing data for offer {offer_id} after publish...")
+        self.db.save() # Save cleared templates and published status
+
+        logger.info(f"[Publish] Refreshing data for offer {offer_id} after publish to get latest live state...")
         self.read_offer_details(offer_id) # This will update title and desc from site
 
     def _save_error_screenshot(self, name_prefix: str) -> None:
@@ -998,42 +982,57 @@ class AllegroScraper:
             logger.error(f"[Scraper] Failed to save error screenshot: {e}")
 
 
-    def refresh_offers(self) -> None:
-        """Refresh offers by merging new arrivals and removing outdated entries."""
+    def refresh_offers(self, reset_pending_changes: bool = False, fetch_missing_descriptions: bool = True) -> None:
+        """
+        Refresh offers by merging new arrivals and removing outdated entries.
+        Optionally resets pending changes and fetches missing descriptions.
+        """
         self._ensure_driver()
-        logger.info("Refreshing offers from website...")
-        self.driver.get(ALLEGRO_URL)
+        action = "Refreshing all offers"
+        if reset_pending_changes:
+            action += " (with reset of pending changes)"
+        if fetch_missing_descriptions:
+            action += " (and fetching missing descriptions)"
+        logger.info(f"{action}...")
 
-        # Add manual login wait here
+        self.driver.get(ALLEGRO_URL)
         self._wait_for_login()
 
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
         )
         max_pages = self._get_max_pages()
-        merged_offers: dict[str, OfferData] = {}
 
-        for page in range(1, max_pages + 1):
-            logger.info(f"[Site] Processing page {page} of {max_pages}...")
+        # This dictionary will hold all offers found in the current scrape session.
+        # It will become the new self.db.data at the end.
+        live_offers_on_site: dict[str, OfferData] = {}
+
+        for page_num in range(1, max_pages + 1):
+            logger.info(f"[Site] Processing page {page_num} of {max_pages}...")
+
+            if page_num > 1:
+                self.driver.get(f"{ALLEGRO_URL}?page={page_num}")
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
+                )
+                human_delay()
+
             soup = BeautifulSoup(self.driver.page_source, "html.parser")
-            offer_cards = soup.find_all("div", class_="my-offer-card")
-            if not offer_cards:
-                logger.warning(f"[Site] No offers found on page {page}, stopping.")
+            offer_cards_on_page = soup.find_all("div", class_="my-offer-card")
+
+            if not offer_cards_on_page:
+                logger.warning(f"[Site] No offers found on page {page_num}. This might be the end or an issue.")
                 break
 
-            for card_html in offer_cards: # Renamed 'card' to 'card_html' for clarity
-                parsed_result = self._extract_offer_card_data(card_html) # Changed from offer_obj to fresh_data_from_card
+            for card_html in offer_cards_on_page:
+                parsed_result = self._extract_offer_card_data(card_html)
                 if parsed_result:
                     offer_link_key, fresh_data_from_card = parsed_result
 
-                    # Logic for refresh_offers:
-                    # If offer exists in DB, update its basic info, preserve desc, desc_new, title_new, published.
-                    # If desc is empty, trigger a read.
-                    # If offer is new, add it and trigger a read for its description.
                     if offer_link_key in self.db.data:
                         existing_model_in_db = self.db.data[offer_link_key]
 
-                        # Update core fields
+                        # Update core fields from the newly scraped card data
                         existing_model_in_db.title = fresh_data_from_card.title
                         existing_model_in_db.price = fresh_data_from_card.price
                         existing_model_in_db.views = fresh_data_from_card.views
@@ -1041,64 +1040,59 @@ class AllegroScraper:
                         existing_model_in_db.image_url = fresh_data_from_card.image_url
                         existing_model_in_db.offer_type = fresh_data_from_card.offer_type
 
-                        merged_offers[offer_link_key] = existing_model_in_db # Add to current live offers
+                        if reset_pending_changes: # Apply reset logic here
+                            logger.debug(f"[DB] Resetting editable fields for offer ID {existing_model_in_db.offer_id}")
+                            existing_model_in_db.title_new = ""
+                            existing_model_in_db.desc_new = ""
+                            existing_model_in_db.published = False
 
-                        # Check if description needs to be (re-)fetched.
-                        # Original description might be empty or placeholder like "-".
-                        # self.reset flag is not typically used with refresh_offers, but good to be aware.
-                        desc_is_missing_or_placeholder = not existing_model_in_db.desc or existing_model_in_db.desc == "-"
+                        live_offers_on_site[offer_link_key] = existing_model_in_db
 
-                        if desc_is_missing_or_placeholder:
-                            logger.info(
-                                f"[Scraper] Existing offer {fresh_data_from_card.offer_id} needs description. Reading..."
-                            )
-                            self.read_offer_details(fresh_data_from_card.offer_id)
-                            # After read_offer_details, self.db.data[offer_link_key] is updated.
-                            # So, we should reflect that in merged_offers.
-                            if offer_link_key in self.db.data: # Check if still exists (should)
-                                merged_offers[offer_link_key] = self.db.data[offer_link_key]
-                        elif self.verbose:
-                            logger.debug(
-                                f"[Scraper] Offer {fresh_data_from_card.offer_id} already has description. Skipping read."
-                            )
-                    else:
-                        # This is a new offer not previously in the database.
-                        # Initialize editable fields and published status.
+                        if fetch_missing_descriptions:
+                            desc_is_missing_or_placeholder = not existing_model_in_db.desc or existing_model_in_db.desc == "-"
+                            if desc_is_missing_or_placeholder:
+                                logger.info(
+                                    f"[Scraper] Existing offer {fresh_data_from_card.offer_id} needs description. Reading..."
+                                )
+                                self.read_offer_details(fresh_data_from_card.offer_id)
+                                if offer_link_key in self.db.data: # Re-sync if read_offer_details updated it
+                                    live_offers_on_site[offer_link_key] = self.db.data[offer_link_key]
+                            elif self.verbose:
+                                logger.debug(
+                                    f"[Scraper] Offer {fresh_data_from_card.offer_id} already has description. Skipping read."
+                                )
+                    else: # New offer
                         fresh_data_from_card.title_new = ""
-                        fresh_data_from_card.desc = "" # Original description is unknown initially
+                        fresh_data_from_card.desc = ""
                         fresh_data_from_card.desc_new = ""
                         fresh_data_from_card.published = False
 
-                        # Add to database first so read_offer_details can find it.
-                        self.db.data[offer_link_key] = fresh_data_from_card
-                        # self.db.save() # Consider if save is needed before read_offer_details for robustness
+                        # Add to temp dict first, then to DB if fetching description
+                        live_offers_on_site[offer_link_key] = fresh_data_from_card
 
-                        logger.info(
-                            f"[Scraper] New offer {fresh_data_from_card.offer_id} found. Reading its description..."
-                        )
-                        self.read_offer_details(fresh_data_from_card.offer_id)
+                        if fetch_missing_descriptions:
+                            # Temporarily add to DB so read_offer_details can find it
+                            self.db.data[offer_link_key] = fresh_data_from_card
+                            logger.info(
+                                f"[Scraper] New offer {fresh_data_from_card.offer_id} found. Reading its description..."
+                            )
+                            self.read_offer_details(fresh_data_from_card.offer_id)
+                            if offer_link_key in self.db.data: # Re-sync from DB after read
+                                live_offers_on_site[offer_link_key] = self.db.data[offer_link_key]
+                            else:
+                                logger.warning(f"Offer {offer_link_key} disappeared after trying to read its details during refresh.")
+                                # If it disappeared, remove from live_offers_on_site as well
+                                if offer_link_key in live_offers_on_site:
+                                    del live_offers_on_site[offer_link_key]
 
-                        # After read_offer_details, self.db.data[offer_link_key] is updated.
-                        # Reflect this in merged_offers.
-                        if offer_link_key in self.db.data: # Check if still exists
-                           merged_offers[offer_link_key] = self.db.data[offer_link_key]
-                        else: # Should not happen if read_offer_details is successful
-                           logger.warning(f"Offer {offer_link_key} disappeared after trying to read its details.")
 
+            logger.debug(f"[Site] Processed {len(offer_cards_on_page)} cards on page {page_num}. Total live offers found so far: {len(live_offers_on_site)}")
 
-            if page < max_pages:
-                self.driver.get(f"{ALLEGRO_URL}?page={page + 1}")
-                WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "my-offer-card"))
-                )
-                human_delay()
-
-        # Update database with merged results
-        # This preserves all data for existing offers and adds new ones
-        self.db.data = merged_offers
+        # After processing all pages, replace the database content with the live offers found.
+        self.db.data = live_offers_on_site
         self.db.save()
         logger.info(
-            f"[Site] Finished refresh: {len(merged_offers)} live offers stored."
+            f"[Site] Finished refresh operation. Database updated with {len(self.db.data)} currently active offers."
         )
 
     def __del__(self):
@@ -1151,23 +1145,29 @@ class ScrapeExecutor:
             return
         self.scraper.read_offer_details(offer_id)
 
-    def execute_set_title(self, offer_id: str, new_title: str | None) -> None:
-        """Execute the set-title command."""
+    def execute_stage_title(self, offer_id: str, new_title_template: str) -> None:
+        """Execute the stage-title command."""
         if self.dryrun:
             logger.info(
-                f"[DryRun] Would set title for offer {offer_id} to: {new_title}"
+                f"[DryRun] Would stage title template for offer {offer_id} to: '{new_title_template}'"
             )
+            # In dryrun, we might still want to see if the offer exists,
+            # but stage_offer_details itself doesn't do web interaction.
+            # For consistency, we can call it, and it should handle dryrun if needed (currently doesn't need to).
+            # Or, simply log and return for dryrun staging.
+            # Let's assume stage_offer_details is safe for dryrun as it's DB only.
+            # However, the executor should respect its own dryrun first for staging.
             return
-        self.scraper.publish_offer_details(offer_id, new_title=new_title)
+        self.scraper.stage_offer_details(offer_id, new_title_template=new_title_template)
 
-    def execute_set_desc(self, offer_id: str, new_desc: str | None) -> None:
-        """Execute the set-desc command."""
+    def execute_stage_desc(self, offer_id: str, new_desc_template: str) -> None:
+        """Execute the stage-desc command."""
         if self.dryrun:
             logger.info(
-                f"[DryRun] Would set description for offer {offer_id} to: {new_desc}"
+                f"[DryRun] Would stage description template for offer {offer_id} to: '{new_desc_template[:100]}...'"
             )
             return
-        self.scraper.publish_offer_details(offer_id, new_desc=new_desc)
+        self.scraper.stage_offer_details(offer_id, new_desc_template=new_desc_template)
 
     def execute_read_all(self) -> None:
         """Execute the read-all command."""
@@ -1178,45 +1178,56 @@ class ScrapeExecutor:
 
     def execute_publish_all(self) -> None:
         """Execute the publish-all command."""
-        if self.dryrun:
-            changes = []
-            for offer in self.db.data.values():
-                offer_id = offer.offer_id
-                if (
-                    offer_id
-                    and not offer.published
-                    and (offer.title_new or offer.desc_new)
-                ):
-                    changes.append(offer_id)
-            if changes:
-                logger.info(
-                    f"[DryRun] Would publish changes for offers: {', '.join(changes)}"
-                )
-                # Let the scraper handle each offer in dry-run mode
-                for offer_id in changes:
-                    self.scraper.publish_offer_details(offer_id)
-            else:
-                logger.info("[DryRun] No unpublished changes to publish")
+        offers_to_publish_ids = [
+            offer.offer_id
+            for offer in self.db.data.values()
+            if offer.offer_id and not offer.published and (offer.title_new or offer.desc_new)
+        ]
+
+        if not offers_to_publish_ids:
+            logger.info("[PublishAll] No unpublished changes to publish.")
             return
 
-        for offer in list(self.db.data.values()):
-            offer_id = offer.offer_id
-            if offer_id and not offer.published and (offer.title_new or offer.desc_new):
-                self.scraper.publish_offer_details(offer_id)
-                human_delay(2.0, 4.0)
+        if self.dryrun:
+            logger.info(f"[DryRun][PublishAll] Would attempt to publish changes for offers: {', '.join(offers_to_publish_ids)}")
+            # The actual dry run logic for web interaction is handled by scraper.publish_offer_details
+            for offer_id_to_publish in offers_to_publish_ids:
+                self.scraper.publish_offer_details(offer_id_to_publish) # Scraper's method respects self.dryrun
+            return
+
+        logger.info(f"[PublishAll] Starting to publish changes for {len(offers_to_publish_ids)} offer(s).")
+        for offer_id_to_publish in offers_to_publish_ids:
+            logger.info(f"[PublishAll] Publishing changes for offer {offer_id_to_publish}...")
+            success = self.scraper.publish_offer_details(offer_id_to_publish)
+            if success:
+                logger.info(f"[PublishAll] Successfully published (or no changes needed for) offer {offer_id_to_publish}.")
+            else:
+                logger.error(f"[PublishAll] Failed to publish offer {offer_id_to_publish}.")
+            human_delay(2.0, 4.0) # Delay between publishing different offers
 
     def execute_publish(self, offer_id: str) -> None:
         """Execute the publish command for a specific offer."""
         offer = self.db.get_offer(offer_id)
         if not offer:
-            logger.error(f"[CLI] Offer {offer_id} not found in database")
-            return
-        if not (offer.title_new or offer.desc_new):
-            logger.info(f"[CLI] No pending changes for offer {offer_id}")
+            logger.error(f"[Publish] Offer {offer_id} not found in database")
             return
 
-        # Let the scraper handle dry-run mode to show template evaluation
-        self.scraper.publish_offer_details(offer_id)
+        if not (offer.title_new or offer.desc_new):
+            logger.info(f"[Publish] No staged changes for offer {offer_id}, nothing to publish.")
+            return
+
+        if self.dryrun:
+            logger.info(f"[DryRun][Publish] Would attempt to publish changes for offer {offer_id}.")
+            # Scraper's method will handle detailed dry run logging
+            self.scraper.publish_offer_details(offer_id)
+            return
+
+        logger.info(f"[Publish] Publishing changes for offer {offer_id}...")
+        success = self.scraper.publish_offer_details(offer_id)
+        if success:
+            logger.info(f"[Publish] Successfully published (or no changes needed for) offer {offer_id}.")
+        else:
+            logger.error(f"[Publish] Failed to publish offer {offer_id}.")
 
 
 class VolanteCLI:
@@ -1282,45 +1293,44 @@ class VolanteCLI:
         executor = ScrapeExecutor(self._db, self.verbose, self.dryrun, self.reset)
         executor.execute_read(offer_id)
 
-    def set_title(
+    def stage_title(
         self,
         offer_id: Doc[str, "Unique identifier for the offer to update"],
-        new_title: Doc[str | None, "New title text to set (optional)"] = None,
+        title_template: Doc[str, "New title template to stage locally. Use {vars} for templating."],
     ):
-        """Update an offer's title on Allegrolokalnie.
+        """Stage a new title template locally for an offer. Does not publish.
 
         Args:
-            offer_id: The offer's unique identifier from its URL
-            new_title: The new title to set. If None, uses title_new from database
+            offer_id: The offer's unique identifier.
+            title_template: The new title template (e.g., "Great Item - {price} PLN").
+                            This is stored in `title_new` in the database.
 
-        This command:
-        1. Navigates to the offer's edit page
-        2. Updates the title field
-        3. Saves the changes on Allegrolokalnie
-        4. Updates the local database
+        Use the `publish` or `publish-all` command to send staged changes to Allegro.
         """
+        if not title_template:
+            logger.error("[CLI] No title template provided for stage_title.")
+            return
         executor = ScrapeExecutor(self._db, self.verbose, self.dryrun, self.reset)
-        executor.execute_set_title(offer_id, new_title)
+        executor.execute_stage_title(offer_id, title_template)
 
-    def set_desc(
+    def stage_desc(
         self,
         offer_id: Doc[str, "Unique identifier for the offer to update"],
-        new_desc: Doc[str | None, "New description text to set (optional)"] = None,
+        desc_template: Doc[str, "New description template to stage locally. Use {vars} for templating."],
     ):
-        """Update an offer's description on Allegrolokalnie.
+        """Stage a new description template locally for an offer. Does not publish.
 
         Args:
-            offer_id: The offer's unique identifier from its URL
-            new_desc: The new description to set. If None, uses desc_new from database
+            offer_id: The offer's unique identifier.
+            desc_template: The new description template. This is stored in `desc_new`.
 
-        This command:
-        1. Navigates to the offer's edit page
-        2. Updates the description field
-        3. Saves the changes on Allegrolokalnie
-        4. Updates the local database
+        Use the `publish` or `publish-all` command to send staged changes to Allegro.
         """
+        if not desc_template:
+            logger.error("[CLI] No description template provided for stage_desc.")
+            return
         executor = ScrapeExecutor(self._db, self.verbose, self.dryrun, self.reset)
-        executor.execute_set_desc(offer_id, new_desc)
+        executor.execute_stage_desc(offer_id, desc_template)
 
     def read_all(self):
         """Refresh all offers and their descriptions from Allegrolokalnie.
