@@ -1,76 +1,289 @@
-1.  **Project Setup and Initial File Creation:**
-    *   Create `PLAN.md` for the detailed plan.
-    *   Create `TODO.md` for the checklist version of the plan.
-    *   Create `CHANGELOG.md` to track changes.
+# Volante Lokalnie - Comprehensive Improvement Plan
 
-2.  **Analyze `ensure_debug_chrome` function:**
-    *   Investigate the `tempfile.mkdtemp()` call and the unused `temp_dir` variable.
-    *   If `temp_dir` is indeed unused and not part of a planned feature, remove the `tempfile.mkdtemp()` call to simplify the function.
-    *   *Decision:* For MVP, keep `CHROME_PATH` hardcoded but add a prominent log/documentation note about it if detection/launch fails. Configurable paths are a v1.x feature.
+## Executive Summary
 
-3.  **Refactor `fetch_offers` and `refresh_offers` in `AllegroScraper`:**
-    *   **Goal:** Reduce code duplication and clarify roles. `refresh_offers` is more comprehensive.
-    *   **Proposal:**
-        *   Modify `refresh_offers` to optionally accept a `reset_pending_changes: bool` parameter (defaulting to `False`).
-        *   When `reset_pending_changes` is `True`, `refresh_offers` will mimic the reset behavior currently in `fetch_offers` (clearing `title_new`, `desc_new`, `published` for existing offers).
-        *   The core logic of iterating pages and processing cards will primarily reside in `refresh_offers` (or a shared helper).
-        *   `fetch_offers` will become a simpler method that calls `refresh_offers` with `reset_pending_changes=self.reset`.
-        *   Ensure that `refresh_offers` correctly handles the logic for fetching descriptions for new offers or existing offers that are missing descriptions (currently, it calls `self.read_offer_details`).
-    *   Update calls to these methods in `ScrapeExecutor` if their signatures change (though `fetch_offers` in `AllegroScraper` might keep its signature and internally call the modified `refresh_offers`).
+This plan outlines a comprehensive roadmap to transform Volante Lokalnie from a functional web scraping tool into a robust, production-ready application. The improvements focus on stability, elegance, deployability, and user experience while maintaining the core functionality of managing Allegro Lokalnie offers.
 
-4.  **Clarify `set-title`/`set-desc` and `publish_offer_details` workflow:**
-    *   **Current:** `set-title`/`set-desc` CLI commands call `ScrapeExecutor.execute_set_title/desc` which calls `AllegroScraper.publish_offer_details` with only one field. `publish_offer_details` seems to:
-        1.  Update the local `title_new`/`desc_new` in the `OfferData` model *with the evaluated content*.
-        2.  Attempt to publish this one change to the website.
-    *   **Problem:**
-        *   Storing evaluated content in `title_new`/`desc_new` means the original template/intent is lost from the DB after the first attempt.
-        *   The commands `set-title`/`set-desc` imply "setting" a value locally for later publishing, but they trigger an immediate publish attempt for that single field.
-    *   **Proposal for MVP (Focus on clear, distinct actions):**
-        *   **`AllegroScraper.stage_offer_details(offer_id: str, new_title_template: str | None = None, new_desc_template: str | None = None)`:**
-            *   This new method will be responsible *only* for updating `offer.title_new` or `offer.desc_new` in the database with the provided *template strings*.
-            *   It will *not* evaluate templates and *not* interact with Selenium.
-            *   It will set `offer.published = False`.
-        *   **`VolanteCLI.set_title(offer_id, new_title_template)` and `VolanteCLI.set_desc(offer_id, new_desc_template)`:**
-            *   These CLI commands will now call `ScrapeExecutor.execute_stage_title/desc` which in turn call `AllegroScraper.stage_offer_details`.
-        *   **`AllegroScraper.publish_offer_details(offer_id: str)` (Modified):**
-            *   This method will now *only* handle the publishing of *already staged* changes.
-            *   It will read `offer.title_new` and `offer.desc_new` (which contain templates).
-            *   It will call `_prepare_title_and_desc_for_publish` (which evaluates templates from `offer.title_new` and `offer.desc_new` against `offer.title` and `offer.desc`).
-            *   It will then proceed with Selenium interactions to publish.
-            *   The arguments `new_title: str | None = None, new_desc: str | None = None` will be removed from `publish_offer_details`.
-        *   **`ScrapeExecutor.execute_set_title` and `execute_set_desc` will be renamed** to `execute_stage_title` and `execute_stage_desc`.
-        *   **`ScrapeExecutor.execute_publish(offer_id)` and `execute_publish_all()`** will continue to call the modified `AllegroScraper.publish_offer_details(offer_id)`.
-    *   This makes a clearer separation: `set-*` commands stage changes locally, `publish*` commands push staged changes.
+## Current State Analysis
 
-5.  **Refine `_finalize_successful_publish` in `AllegroScraper`:**
-    *   After a successful publish and the call to `self.read_offer_details(offer_id)` (which updates `offer.desc` and potentially other fields from the live site):
-        *   Explicitly set `self.db.data[offer_link_key].title_new = ""`
-        *   Explicitly set `self.db.data[offer_link_key].desc_new = ""`
-        *   Ensure `self.db.data[offer_link_key].published = True` is set.
-        *   Save the database.
-    *   This ensures that pending changes are clearly marked as resolved.
+### Strengths
+- Well-structured codebase with modern Python practices
+- Comprehensive CLI and new TUI interfaces
+- Good test coverage for core functionality
+- Clear separation of concerns after recent refactoring
+- Strong typing with Pydantic models
+- CI/CD pipeline with GitHub Actions
 
-6.  **Update `_evaluate_template` in `AllegroScraper`:**
-    *   Modify the `context` dictionary to include all fields from the `OfferData` model if they are intended to be available as placeholders (e.g., `price`, `views`, `offer_id`, `listing_date`).
-    *   The `offer` argument should ideally be an `OfferData` instance or its `model_dump()` result. Currently, it's typed as `dict`. This is acceptable for MVP but ensure all relevant fields are passed.
+### Areas for Improvement
+- Hardcoded configuration values
+- Limited error recovery mechanisms
+- Platform-specific Chrome detection
+- No retry logic for transient failures
+- Limited deployment options
+- Web scraping fragility
+- No configuration management
+- Limited monitoring capabilities
 
-7.  **Review `offer_id` extraction:**
-    *   In `_extract_offer_card_data`, the line `offer_id = offer_link.split("/")[-1]` has a TODO.
-    *   For MVP, if this is working, leave as is but ensure the TODO comment remains prominent. A more robust solution (e.g., regex, more specific element attribute) can be for v1.x.
+## Improvement Roadmap
 
-8.  **Documentation and Cleanup:**
-    *   Update docstrings for modified methods and classes.
-    *   Ensure comments are relevant.
-    *   Update `README.md` if command behavior changes significantly (e.g., `set-title` no longer auto-publishes).
-    *   Update `PLAN.md` and `TODO.md` as steps are completed.
-    *   Record all significant changes in `CHANGELOG.md`.
+### Phase 1: Stability & Reliability (Priority: Critical)
 
-9.  **Testing:**
-    *   Update existing tests to reflect changes in method signatures and behavior.
-    *   Add new tests for any new methods (e.g., `stage_offer_details`).
-    *   Ensure all tests pass.
+#### 1.1 Configuration Management
+- **Implement Configuration System**
+  - Create `config.py` module with configuration classes
+  - Support for environment variables with `python-dotenv`
+  - Configuration file support (TOML/YAML)
+  - Default values with override hierarchy: ENV > Config File > Defaults
+  - Configuration validation with Pydantic
 
-10. **Final Review and Submission:**
-    *   Review all changes.
-    *   Ensure the application works as expected.
-    *   Submit the changes with a descriptive commit message.
+```python
+# Example configuration structure
+class ChromeConfig(BaseModel):
+    path: str = Field(default="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    debug_port: int = Field(default=9222)
+    headless: bool = Field(default=False)
+    timeout: int = Field(default=30)
+
+class DatabaseConfig(BaseModel):
+    path: Path = Field(default_factory=lambda: Path.home() / ".volante_lokalnie" / "offers.toml")
+    backup_enabled: bool = Field(default=True)
+    backup_count: int = Field(default=5)
+
+class ScraperConfig(BaseModel):
+    retry_attempts: int = Field(default=3)
+    retry_delay: float = Field(default=2.0)
+    human_delay_min: float = Field(default=1.0)
+    human_delay_max: float = Field(default=3.0)
+```
+
+#### 1.2 Error Handling & Recovery
+- **Implement Retry Logic**
+  - Add exponential backoff for transient failures
+  - Implement circuit breaker pattern for repeated failures
+  - Add specific exception types for different failure scenarios
+  - Create recovery strategies for common errors
+
+- **Enhanced Exception Handling**
+  - Create custom exception hierarchy
+  - Add context to exceptions (offer ID, operation, timestamp)
+  - Implement graceful degradation strategies
+  - Add error recovery workflows
+
+#### 1.3 Chrome Browser Management
+- **Cross-Platform Chrome Detection**
+  - Implement platform-specific Chrome location detection
+  - Support for Chrome, Chromium, and Brave browsers
+  - Automatic driver download with `webdriver-manager`
+  - Fallback to user-specified path
+  - Better error messages for missing Chrome
+
+```python
+def find_chrome_executable() -> Path:
+    """Find Chrome executable across different platforms."""
+    candidates = {
+        "darwin": [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+        ],
+        "linux": [
+            "/usr/bin/google-chrome",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/snap/bin/chromium"
+        ],
+        "win32": [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files\Chromium\Application\chrome.exe"
+        ]
+    }
+    # Implementation details...
+```
+
+### Phase 2: Architecture & Code Quality (Priority: High)
+
+#### 2.1 Modularization
+- **Split Large Modules**
+  - Extract scraper logic into separate modules:
+    - `scraper/base.py` - Base scraper class
+    - `scraper/allegro.py` - Allegro-specific implementation
+    - `scraper/browser.py` - Browser management
+    - `scraper/parsers.py` - HTML parsing logic
+  - Create `models/` directory for data models
+  - Create `utils/` directory for utilities
+  - Create `config/` directory for configuration
+
+#### 2.2 Dependency Injection
+- **Implement DI Container**
+  - Use `dependency-injector` or similar
+  - Make components more testable
+  - Reduce coupling between modules
+  - Easier mocking for tests
+
+#### 2.3 Async Support
+- **Add Asynchronous Operations**
+  - Use `asyncio` for concurrent operations
+  - Implement async database operations
+  - Add async HTTP client for API calls
+  - Background task queue for long operations
+
+### Phase 3: Deployment & Installation (Priority: High)
+
+#### 3.1 Docker Support
+- **Create Docker Images**
+  - Multi-stage Dockerfile for minimal image size
+  - Docker Compose for development environment
+  - Pre-configured Chrome/Chromium in container
+  - Volume mounts for data persistence
+
+```dockerfile
+# Example Dockerfile
+FROM python:3.12-slim as builder
+# Build dependencies...
+
+FROM python:3.12-slim
+# Install Chrome/Chromium
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-driver \
+    && rm -rf /var/lib/apt/lists/*
+# Copy application...
+```
+
+#### 3.2 Platform-Specific Packages
+- **Create Native Installers**
+  - Windows: MSI installer with `cx_Freeze` or `PyInstaller`
+  - macOS: DMG with `py2app` or `briefcase`
+  - Linux: DEB/RPM packages, Snap, or AppImage
+  - Include Chrome/Chromium bundling option
+
+#### 3.3 Installation Scripts
+- **Automated Setup**
+  - Platform detection script
+  - Dependency verification
+  - Chrome installation helper
+  - Configuration wizard
+  - First-run experience
+
+### Phase 4: User Experience (Priority: Medium)
+
+#### 4.1 Enhanced TUI
+- **Improve Terminal UI**
+  - Add more keyboard shortcuts
+  - Implement search/filter in offer list
+  - Add bulk operations support
+  - Real-time updates with WebSocket
+  - Export functionality (CSV, JSON)
+  - Import functionality
+
+#### 4.2 Web Interface
+- **Optional Web UI**
+  - FastAPI backend
+  - Vue.js or React frontend
+  - Real-time updates
+  - Multi-user support
+  - REST API for automation
+
+#### 4.3 Documentation
+- **Comprehensive Docs**
+  - MkDocs documentation site
+  - Video tutorials
+  - Example workflows
+  - Troubleshooting guide
+  - API documentation
+
+### Phase 5: Monitoring & Observability (Priority: Medium)
+
+#### 5.1 Structured Logging
+- **Implement Structured Logs**
+  - Use `structlog` for structured logging
+  - Add correlation IDs
+  - Log to file with rotation
+  - Different log levels per module
+  - Remote logging option (Sentry, etc.)
+
+#### 5.2 Metrics & Monitoring
+- **Add Metrics Collection**
+  - Operation success/failure rates
+  - Performance metrics
+  - Resource usage
+  - Export to Prometheus/Grafana
+  - Health check endpoint
+
+#### 5.3 Error Tracking
+- **Implement Error Tracking**
+  - Sentry integration
+  - Error aggregation
+  - Alert notifications
+  - Performance monitoring
+
+### Phase 6: Advanced Features (Priority: Low)
+
+#### 6.1 Plugin System
+- **Extensibility**
+  - Plugin architecture
+  - Custom scrapers
+  - Custom data processors
+  - Webhook support
+  - Event system
+
+#### 6.2 Multi-Platform Support
+- **Support Other Platforms**
+  - OLX integration
+  - Facebook Marketplace
+  - Other local marketplaces
+  - Unified interface
+
+#### 6.3 AI/ML Features
+- **Smart Automation**
+  - Price optimization suggestions
+  - Description generation with LLMs
+  - Image optimization
+  - Demand prediction
+  - Automatic categorization
+
+## Implementation Timeline
+
+### Month 1-2: Foundation
+- Configuration management system
+- Enhanced error handling
+- Cross-platform Chrome support
+- Basic retry logic
+
+### Month 3-4: Architecture
+- Code modularization
+- Dependency injection
+- Improved test coverage
+- Docker support
+
+### Month 5-6: Deployment
+- Platform packages
+- Installation scripts
+- Documentation
+- Web UI (optional)
+
+### Month 7-8: Polish
+- Monitoring system
+- Performance optimization
+- Advanced features
+- Community building
+
+## Success Metrics
+
+- **Stability**: <1% failure rate for core operations
+- **Performance**: <5s average operation time
+- **Usability**: <5 min setup time for new users
+- **Coverage**: >90% test coverage
+- **Adoption**: Active user community
+
+## Risk Mitigation
+
+- **Web Scraping Changes**: Implement robust selectors, version detection
+- **Platform Differences**: Extensive cross-platform testing
+- **Performance Issues**: Profiling, optimization, caching
+- **User Adoption**: Clear documentation, easy setup
+
+## Conclusion
+
+This comprehensive plan transforms Volante Lokalnie into a professional-grade tool while maintaining its core simplicity. The phased approach allows for incremental improvements while continuously delivering value to users.
