@@ -28,16 +28,23 @@ dev = [
     "ruff>=0.5.5", # Updated to latest
     "mypy>=1.11.0", # Updated to latest
     "pyupgrade>=3.20.0", # Minor update
+    "build>=1.0.0", # For building distributions
+    "twine>=4.0.0", # For uploading to PyPI
 ]
 
 test = [
     "pytest>=8.4.1", # Minor update
     "pytest-cov>=6.2.1", # Minor update
+    "pytest-xdist>=3.3.0", # For parallel testing
 ]
 
+build = [
+    "pyinstaller>=6.0.0", # For creating binaries
+    "cx_Freeze>=7.0.0", # Alternative binary builder
+]
 
 all = [ # This can be used to install all optional dependencies
-    "volante_lokalnie[dev,test]"
+    "volante_lokalnie[dev,test,build]"
 ]
 
 [project.scripts]

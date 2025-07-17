@@ -118,27 +118,139 @@ These options can be used with any command:
 
 ## 🛠️ Development
 
-This project uses [Hatch](https://hatch.pypa.io/) for Python project and environment management. Pre-commit hooks are used for code quality.
+This project uses modern Python tooling including [UV](https://docs.astral.sh/uv/) for fast dependency management and [Hatch](https://hatch.pypa.io/) for project management. The build system supports git-tag-based semantic versioning and multiplatform binary distribution.
 
-### Setup
+### Quick Setup
 
 1.  **Clone the repository:**
     ```bash
     git clone https://github.com/twardoch/volante_lokalnie.git
     cd volante_lokalnie
     ```
-2.  **Install Hatch:**
+
+2.  **Install UV (recommended):**
     ```bash
-    pip install hatch
-    # or using uv
-    uv pip install hatch
+    curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
-3.  **Activate development environment:**
-    Hatch will automatically create and manage a virtual environment.
+
+3.  **Setup development environment:**
     ```bash
-    hatch shell
+    # Install all dependencies
+    uv pip install ".[dev,test,build]"
+    
+    # Or use the convenience Makefile
+    make dev-setup
     ```
-    This installs all dependencies, including development tools like `pytest`, `ruff`, `mypy`.
+
+### Build System
+
+The project includes a comprehensive build system with convenient scripts:
+
+#### Using the Build Script
+
+```bash
+# Clean build artifacts
+python scripts/build.py clean
+
+# Run linting checks
+python scripts/build.py lint
+
+# Run tests
+python scripts/build.py test
+
+# Build package distributions
+python scripts/build.py build
+
+# Create binary distributions
+python scripts/build.py binary
+
+# Run all checks
+python scripts/build.py all
+```
+
+#### Using the Makefile
+
+```bash
+# Show all available commands
+make help
+
+# Setup development environment
+make dev-setup
+
+# Run all checks and build
+make all
+
+# Run tests with coverage
+make dev-test
+
+# Create releases
+make release-patch    # 1.0.0 -> 1.0.1
+make release-minor    # 1.0.0 -> 1.1.0
+make release-major    # 1.0.0 -> 2.0.0
+make release-dry-run  # Test without actually releasing
+```
+
+### Release Process
+
+The project uses git-tag-based semantic versioning with automated CI/CD:
+
+#### Manual Release
+
+```bash
+# Create a patch release (1.0.0 -> 1.0.1)
+./scripts/release.sh -t patch
+
+# Create a minor release (1.0.0 -> 1.1.0)
+./scripts/release.sh -t minor -m "Add new features"
+
+# Create a major release (1.0.0 -> 2.0.0)
+./scripts/release.sh -t major -m "Breaking changes"
+
+# Custom version
+./scripts/release.sh -v 1.2.3 -m "Custom release"
+```
+
+#### Automated CI/CD
+
+**⚠️ Note for Repository Maintainers**: GitHub Actions workflows need to be manually activated. See [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md) for setup instructions.
+
+1. **Push to main branch**: Runs tests, linting, and builds
+2. **Create git tag**: `git tag v1.2.3 && git push origin v1.2.3`
+3. **GitHub Actions automatically**:
+   - Runs comprehensive tests across Python 3.10, 3.11, 3.12
+   - Tests on Linux, Windows, and macOS
+   - Creates multiplatform binaries (Linux, Windows, macOS)
+   - Publishes to PyPI
+   - Creates GitHub release with binaries attached
+
+**Quick Setup for Maintainers**:
+```bash
+# Copy workflow files
+cp .github/workflows-templates/*.yml .github/workflows/
+
+# Configure PYPI_TOKEN secret in repository settings
+# Then test with a pre-release tag
+git tag v1.0.3-rc1 && git push origin v1.0.3-rc1
+```
+
+### Binary Distribution
+
+The project creates standalone binaries for easy installation:
+
+```bash
+# Create binary for current platform
+python scripts/build.py binary
+
+# Create binary for specific platform
+python scripts/build.py binary --target-os linux
+python scripts/build.py binary --target-os windows
+python scripts/build.py binary --target-os macos
+```
+
+Users can download binaries from GitHub releases:
+- **Linux**: `volante-lokalnie-linux`
+- **Windows**: `volante-lokalnie-windows.exe`
+- **macOS**: `volante-lokalnie-macos`
 
 ### Running Quality Checks
 

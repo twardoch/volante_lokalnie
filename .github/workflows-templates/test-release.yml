@@ -1,0 +1,114 @@
+name: Test Release Process
+
+on:
+  push:
+    tags: ["v*-rc*", "v*-alpha*", "v*-beta*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to test (e.g., v1.2.3-rc1)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test-release-process:
+    name: Test Release Process
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv pip install --system ".[dev,test]"
+
+      - name: Test version extraction
+        run: |
+          python -c "from volante_lokalnie import __version__; print(f'Version: {__version__}')"
+          python scripts/build.py clean
+
+      - name: Run full build pipeline
+        run: python scripts/build.py all
+
+      - name: Test binary creation
+        run: |
+          uv pip install --system pyinstaller
+          python scripts/build.py binary
+
+      - name: Test release script (dry run)
+        run: |
+          chmod +x scripts/release.sh
+          ./scripts/release.sh -t patch --dry-run
+
+      - name: Verify distribution contents
+        run: |
+          ls -la dist/
+          python -m tarfile -l dist/*.tar.gz | head -20
+          python -m zipfile -l dist/*.whl | head -20
+
+  test-multiplatform-binaries:
+    name: Test Binary Creation (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system ".[dev,test]"
+          uv pip install --system pyinstaller
+
+      - name: Test binary creation
+        run: |
+          python scripts/build.py binary --target-os ${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'windows-latest' && 'windows' || 'macos' }}
+
+      - name: Test binary execution (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          chmod +x dist/volante-lokalnie-*
+          ./dist/volante-lokalnie-* --help || true
+
+      - name: Test binary execution (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          ./dist/volante-lokalnie-*.exe --help || true
+
+      - name: Upload test binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-binary-${{ matrix.os }}
+          path: dist/volante-lokalnie-*
+          retention-days: 1

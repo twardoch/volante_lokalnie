@@ -83,12 +83,14 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-        os: [ubuntu-latest]
-      fail-fast: true
+        os: [ubuntu-latest, windows-latest, macos-latest]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -109,7 +111,7 @@ jobs:
           uv pip install --system ".[test]"
 
       - name: Run tests with Pytest
-        run: uv run pytest -n auto --maxfail=1 --disable-warnings --cov-report=xml --cov-config=pyproject.toml --cov=src/volante_lokalnie --cov=tests tests/
+        run: uv run pytest -v --maxfail=1 --disable-warnings --cov-report=xml --cov-config=pyproject.toml --cov=src/volante_lokalnie --cov=tests tests/
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -117,9 +119,47 @@ jobs:
           name: coverage-${{ matrix.python-version }}-${{ matrix.os }}
           path: coverage.xml
 
+  test-build-scripts:
+    name: Test Build Scripts
+    needs: [quality, mypy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv pip install --system ".[dev,test]"
+
+      - name: Test build script
+        run: |
+          python scripts/build.py --help
+          python scripts/build.py clean
+          python scripts/build.py lint
+          python scripts/build.py test
+
+      - name: Test release script
+        run: |
+          chmod +x scripts/release.sh
+          ./scripts/release.sh --help
+          ./scripts/release.sh -t patch --dry-run
+
   build:
     name: Build Distribution
-    needs: test
+    needs: [test, test-build-scripts]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -143,8 +183,8 @@ jobs:
       - name: Install build dependencies
         run: uv pip install --system build hatchling hatch-vcs twine
 
-      - name: Build distributions
-        run: uv run python -m build --sdist --wheel --outdir dist .
+      - name: Build distributions using build script
+        run: python scripts/build.py build
 
       - name: Verify built distributions
         run: |
