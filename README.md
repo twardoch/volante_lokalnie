@@ -212,6 +212,8 @@ The project uses git-tag-based semantic versioning with automated CI/CD:
 
 #### Automated CI/CD
 
+**⚠️ Note for Repository Maintainers**: GitHub Actions workflows need to be manually activated. See [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md) for setup instructions.
+
 1. **Push to main branch**: Runs tests, linting, and builds
 2. **Create git tag**: `git tag v1.2.3 && git push origin v1.2.3`
 3. **GitHub Actions automatically**:
@@ -220,6 +222,16 @@ The project uses git-tag-based semantic versioning with automated CI/CD:
    - Creates multiplatform binaries (Linux, Windows, macOS)
    - Publishes to PyPI
    - Creates GitHub release with binaries attached
+
+**Quick Setup for Maintainers**:
+```bash
+# Copy workflow files
+cp .github/workflows-templates/*.yml .github/workflows/
+
+# Configure PYPI_TOKEN secret in repository settings
+# Then test with a pre-release tag
+git tag v1.0.3-rc1 && git push origin v1.0.3-rc1
+```
 
 ### Binary Distribution
 
