@@ -1,0 +1,14 @@
+143	./llms.txt
+120	./uv.lock
+62	./src/volante_lokalnie/volante_lokalnie.py
+26	./src/volante_lokalnie/tui.py
+13	./README.md
+12	./tests/test_allegro_scraper.py
+10	./tests/test_cli.py
+10	./tests/test_offer_database.py
+9	./PLAN.md
+7	./pyproject.toml
+6	./src/volante_lokalnie/volante_lokalnie.tcss
+4	./tests/test_offer_data.py
+4	./CHANGELOG.md
+3	./TODO.md
